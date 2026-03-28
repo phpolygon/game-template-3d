@@ -71,7 +71,7 @@ class PlaygroundScene extends Scene
             ->with(new Transform3D(
                 position: new Vec3(0.0, 1.5, 12.0),
             ))
-            ->with(new Camera3DComponent(fov: 70.0, near: 0.1, far: 500.0))
+            ->with(new Camera3DComponent(fov: 70.0, near: 0.3, far: 500.0))
             ->with(new CharacterController3D(height: 1.8, radius: 0.4))
             ->with(new FirstPersonCamera());
 
@@ -693,7 +693,7 @@ class PlaygroundScene extends Scene
                     scale: $rock['scale'],
                 ))
                 ->with(new MeshRenderer(meshId: "rock_mesh_{$i}", materialId: $rock['mat']))
-                ->with(new BoxCollider3D(size: new Vec3($rock['scale']->x * 1.2, $rock['scale']->y * 1.2, $rock['scale']->z * 1.2), isStatic: true));
+                ->with(new \PHPolygon\Component\MeshCollider3D(meshId: "rock_mesh_{$i}", isStatic: true));
         }
     }
 
