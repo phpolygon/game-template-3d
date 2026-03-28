@@ -1,0 +1,7 @@
+/vendor/
+/saves/
+*.phar
+*.spv
+.phpunit.cache/
+.idea/
+.DS_Store

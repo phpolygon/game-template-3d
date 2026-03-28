@@ -1,0 +1,16 @@
+{
+    "name": "MyGame3D",
+    "identifier": "com.phpolygon.game-template-3d",
+    "version": "0.1.0",
+    "entry": "game.php",
+    "run": "\\App\\Game::run();",
+    "php": {
+        "extensions": ["glfw", "mbstring", "zip", "phar"]
+    },
+    "phar": {
+        "exclude": ["**/tests", "**/docs", "**/.git", "**/.idea"]
+    },
+    "resources": {
+        "external": ["assets", "resources"]
+    }
+}
