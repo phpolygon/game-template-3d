@@ -17,6 +17,10 @@ use PHPolygon\Runtime\Window;
 class FirstPersonCameraSystem extends AbstractSystem
 {
     private const JUMP_FORCE = 6.0;
+    private const WATER_SURFACE_Y = -0.25;
+    private const WATER_ZONE_Z = -8.0;
+    private const SWIM_SPEED_FACTOR = 0.5;
+    private const BUOYANCY_FORCE = 12.0;
 
     private bool $cursorCaptured = false;
     private float $lastMouseX = 0.0;
@@ -40,16 +44,19 @@ class FirstPersonCameraSystem extends AbstractSystem
                 $this->cursorCaptured = true;
                 $this->firstMouse = true;
                 $this->initialCaptureDone = true;
+                $this->window->setCursorDisabled();
             }
 
             // Escape releases mouse, left click re-captures
             if ($this->input->isKeyPressed(GLFW_KEY_ESCAPE)) {
                 $this->cursorCaptured = false;
                 $this->firstMouse = true;
+                $this->window->setCursorNormal();
             }
             if (!$this->cursorCaptured && $this->input->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
                 $this->cursorCaptured = true;
                 $this->firstMouse = true;
+                $this->window->setCursorDisabled();
             }
 
             // Mouse look
@@ -81,16 +88,33 @@ class FirstPersonCameraSystem extends AbstractSystem
             $forward = $rotation->rotateVec3(new Vec3(0.0, 0.0, -1.0));
             $right = $rotation->rotateVec3(new Vec3(1.0, 0.0, 0.0));
 
-            // Flatten to XZ plane for movement
-            $forward = new Vec3($forward->x, 0.0, $forward->z);
-            $fwdLen = sqrt($forward->x ** 2 + $forward->z ** 2);
-            if ($fwdLen > 0.001) {
-                $forward = new Vec3($forward->x / $fwdLen, 0.0, $forward->z / $fwdLen);
-            }
-            $right = new Vec3($right->x, 0.0, $right->z);
-            $rLen = sqrt($right->x ** 2 + $right->z ** 2);
-            if ($rLen > 0.001) {
-                $right = new Vec3($right->x / $rLen, 0.0, $right->z / $rLen);
+            // Check if player is in water (needed for movement mode)
+            $isInWater = $transform->position->y < self::WATER_SURFACE_Y
+                && $transform->position->z < self::WATER_ZONE_Z;
+
+            if ($isInWater) {
+                // Swimming: full 3D movement in look direction (allows diving)
+                $fwdLen = sqrt($forward->x ** 2 + $forward->y ** 2 + $forward->z ** 2);
+                if ($fwdLen > 0.001) {
+                    $forward = new Vec3($forward->x / $fwdLen, $forward->y / $fwdLen, $forward->z / $fwdLen);
+                }
+                $right = new Vec3($right->x, 0.0, $right->z);
+                $rLen = sqrt($right->x ** 2 + $right->z ** 2);
+                if ($rLen > 0.001) {
+                    $right = new Vec3($right->x / $rLen, 0.0, $right->z / $rLen);
+                }
+            } else {
+                // Land: flatten to XZ plane
+                $forward = new Vec3($forward->x, 0.0, $forward->z);
+                $fwdLen = sqrt($forward->x ** 2 + $forward->z ** 2);
+                if ($fwdLen > 0.001) {
+                    $forward = new Vec3($forward->x / $fwdLen, 0.0, $forward->z / $fwdLen);
+                }
+                $right = new Vec3($right->x, 0.0, $right->z);
+                $rLen = sqrt($right->x ** 2 + $right->z ** 2);
+                if ($rLen > 0.001) {
+                    $right = new Vec3($right->x / $rLen, 0.0, $right->z / $rLen);
+                }
             }
 
             $move = Vec3::zero();
@@ -107,24 +131,51 @@ class FirstPersonCameraSystem extends AbstractSystem
                 $move = $move->sub($right);
             }
 
+            $speedFactor = $isInWater ? self::SWIM_SPEED_FACTOR : 1.0;
+
             $moveLen = sqrt($move->x ** 2 + $move->y ** 2 + $move->z ** 2);
             if ($moveLen > 0.001) {
+                $speed = $camera->moveSpeed * $speedFactor * $dt;
                 $move = new Vec3(
-                    $move->x / $moveLen * $camera->moveSpeed * $dt,
-                    0.0,
-                    $move->z / $moveLen * $camera->moveSpeed * $dt,
+                    $move->x / $moveLen * $speed,
+                    $isInWater ? $move->y / $moveLen * $speed : 0.0,
+                    $move->z / $moveLen * $speed,
                 );
                 $transform->position = $transform->position->add($move);
             }
 
-            // Jump — Space key sets upward velocity via CharacterController3D
             $controller = $world->tryGetComponent($entity->id, CharacterController3D::class);
-            if ($controller !== null && $controller->isGrounded && $this->input->isKeyPressed(GLFW_KEY_SPACE)) {
-                $controller->velocity = new Vec3(
-                    $controller->velocity->x,
-                    self::JUMP_FORCE,
-                    $controller->velocity->z,
-                );
+            if ($controller !== null) {
+                if ($isInWater) {
+                    // Swimming: counteract gravity, buoyancy toward surface, Space rises
+                    $depthBelowSurface = self::WATER_SURFACE_Y - $transform->position->y;
+
+                    // Base buoyancy: counteract gravity (9.81) + push toward surface
+                    $buoyancy = 9.81 + $depthBelowSurface * self::BUOYANCY_FORCE;
+
+                    if ($this->input->isKeyDown(GLFW_KEY_SPACE)) {
+                        $buoyancy += self::BUOYANCY_FORCE;
+                    }
+                    if ($this->input->isKeyDown(GLFW_KEY_LEFT_SHIFT)) {
+                        $buoyancy -= self::BUOYANCY_FORCE * 1.5; // dive down
+                    }
+
+                    // Heavy water drag on all axes
+                    $controller->velocity = new Vec3(
+                        $controller->velocity->x * 0.92,
+                        $controller->velocity->y * 0.88 + $buoyancy * $dt,
+                        $controller->velocity->z * 0.92,
+                    );
+                } else {
+                    // Land: normal jump
+                    if ($controller->isGrounded && $this->input->isKeyPressed(GLFW_KEY_SPACE)) {
+                        $controller->velocity = new Vec3(
+                            $controller->velocity->x,
+                            self::JUMP_FORCE,
+                            $controller->velocity->z,
+                        );
+                    }
+                }
             }
         }
     }

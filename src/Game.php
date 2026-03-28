@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App;
 
 use App\System\AmbientAudioSystem;
+use App\System\AmbientLightSystem;
 use App\System\CloudSystem;
 use App\System\FirstPersonCameraSystem;
 use App\System\FootprintSystem;
 use App\System\PalmSwaySystem;
+use App\System\PlayerBodySystem;
+use PHPolygon\System\InstancedTerrainSystem;
 use App\System\WaveSystem;
 use App\System\WindSystem;
 use PHPolygon\Audio\AudioManager;
@@ -47,15 +50,18 @@ class Game
                 : $engine->audio;
 
             $engine->world->addSystem(new FirstPersonCameraSystem($engine->input, $engine->window));
+            $engine->world->addSystem(new PlayerBodySystem());
             $engine->world->addSystem(new WindSystem());
             $engine->world->addSystem(new PalmSwaySystem());
             $engine->world->addSystem(new WaveSystem());
             $engine->world->addSystem(new FootprintSystem());
             $engine->world->addSystem(new CloudSystem());
             $engine->world->addSystem(new AmbientAudioSystem($audioManager, $config->assetsPath));
+            $engine->world->addSystem(new AmbientLightSystem($commandList));
             $engine->world->addSystem(new Transform3DSystem());
-            $engine->world->addSystem(new Physics3DSystem());
+            $engine->world->addSystem(new Physics3DSystem(groundPlaneY: -5.0));
             $engine->world->addSystem(new Camera3DSystem($commandList, $config->width, $config->height));
+            $engine->world->addSystem(new InstancedTerrainSystem($commandList));
             $engine->world->addSystem(new Renderer3DSystem(
                 $engine->renderer3D,
                 $commandList,

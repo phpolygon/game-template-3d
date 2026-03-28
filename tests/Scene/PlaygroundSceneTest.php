@@ -6,7 +6,7 @@ namespace App\Tests\Scene;
 
 use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
-use App\Component\PalmSway;
+use PHPolygon\Component\PalmSway;
 use App\Component\WaveStrip;
 use App\Component\Wind;
 use App\Scene\PlaygroundScene;
@@ -49,11 +49,11 @@ class PlaygroundSceneTest extends TestCase
         $this->assertArrayHasKey('Sand', $map);
         $sand = $world->getComponent($map['Sand'], MeshRenderer::class);
         $this->assertSame('plane', $sand->meshId);
-        $this->assertSame('sand', $sand->materialId);
+        $this->assertSame('sand_dry', $sand->materialId);
 
         $this->assertArrayHasKey('DeepOcean', $map);
         $ocean = $world->getComponent($map['DeepOcean'], MeshRenderer::class);
-        $this->assertSame('deep_water', $ocean->materialId);
+        $this->assertSame('ocean_abyss', $ocean->materialId);
     }
 
     public function testSceneHasPalmTrees(): void
@@ -61,23 +61,32 @@ class PlaygroundSceneTest extends TestCase
         ['world' => $world, 'map' => $map] = $this->buildScene();
 
         $trunkCount = 0;
+        $stemCount = 0;
         $leafCount = 0;
         foreach ($map as $name => $id) {
-            if (str_starts_with($name, 'PalmTrunk_')) {
+            if (str_contains($name, '_TrunkLower') || str_contains($name, '_TrunkUpper')) {
                 $mesh = $world->getComponent($id, MeshRenderer::class);
                 $this->assertSame('cylinder', $mesh->meshId);
                 $this->assertTrue($world->hasComponent($id, PalmSway::class));
                 $trunkCount++;
             }
-            if (str_starts_with($name, 'PalmLeaf_')) {
+            if (str_contains($name, '_Stem')) {
                 $mesh = $world->getComponent($id, MeshRenderer::class);
-                $this->assertSame('sphere', $mesh->meshId);
+                $this->assertSame('cylinder', $mesh->meshId);
+                $this->assertTrue($world->hasComponent($id, PalmSway::class));
+                $stemCount++;
+            }
+            if (str_contains($name, '_Leaf_')) {
+                $mesh = $world->getComponent($id, MeshRenderer::class);
+                $this->assertSame('box', $mesh->meshId);
                 $this->assertTrue($world->hasComponent($id, PalmSway::class));
                 $leafCount++;
             }
         }
-        $this->assertSame(10, $trunkCount);
-        $this->assertGreaterThan($trunkCount, $leafCount);
+        // 10 palms × 2 trunk segments (lower + upper) = 20
+        $this->assertSame(20, $trunkCount);
+        $this->assertGreaterThan(0, $stemCount);
+        $this->assertGreaterThan(0, $leafCount);
     }
 
     public function testSceneHasRocks(): void

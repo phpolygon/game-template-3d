@@ -6,8 +6,12 @@ namespace App\Scene;
 
 use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
-use App\Component\PalmSway;
-use App\Component\WaveStrip;
+use App\Component\PlayerBody;
+use App\Prefab\SandGrain;
+use App\Prefab\WaterPixel;
+use PHPolygon\Component\InstancedTerrain;
+use PHPolygon\Math\Mat4;
+use PHPolygon\Prefab\PalmTree;
 use App\Component\Wind;
 use PHPolygon\Component\BoxCollider3D;
 use PHPolygon\Component\Camera3DComponent;
@@ -40,7 +44,8 @@ class PlaygroundScene extends Scene
     public function getConfig(): SceneConfig
     {
         $config = new SceneConfig();
-        $config->clearColor = Color::hex('#5b9bd5');
+        // Fallback behind sky dome — deep blue (only visible through gaps)
+        $config->clearColor = Color::hex('#1E5FAA');
         return $config;
     }
 
@@ -49,6 +54,7 @@ class PlaygroundScene extends Scene
         $this->registerMeshes();
         $this->registerMaterials();
 
+        $this->buildSkyDome($builder);
         $this->buildPlayer($builder);
         $this->buildLighting($builder);
         $this->buildWind($builder);
@@ -69,56 +75,145 @@ class PlaygroundScene extends Scene
             ->with(new Camera3DComponent(fov: 70.0, near: 0.1, far: 500.0))
             ->with(new CharacterController3D(height: 1.8, radius: 0.4))
             ->with(new FirstPersonCamera());
+
+        // Visible player body — two legs visible when looking down
+        $builder->entity('PlayerBody')
+            ->with(new Transform3D(
+                position: new Vec3(0.0, 0.3, 12.0),
+                scale: new Vec3(0.3, 0.6, 0.3),
+            ))
+            ->with(new MeshRenderer(meshId: 'box', materialId: 'player_body'))
+            ->with(new PlayerBody());
+
+        // Left foot
+        $builder->entity('PlayerFootL')
+            ->with(new Transform3D(
+                position: new Vec3(-0.15, 0.05, 11.7),
+                scale: new Vec3(0.12, 0.08, 0.25),
+            ))
+            ->with(new MeshRenderer(meshId: 'box', materialId: 'player_shoe'))
+            ->with(new PlayerBody());
+
+        // Right foot
+        $builder->entity('PlayerFootR')
+            ->with(new Transform3D(
+                position: new Vec3(0.15, 0.05, 11.7),
+                scale: new Vec3(0.12, 0.08, 0.25),
+            ))
+            ->with(new MeshRenderer(meshId: 'box', materialId: 'player_shoe'))
+            ->with(new PlayerBody());
+    }
+
+    // =========================================================================
+    //  SKY DOME — giant sphere seen from inside (no backface culling in OpenGL)
+    //  Layered shells create a gradient: horizon warm haze → mid azure → zenith deep blue
+    //  All emission-lit so they glow regardless of sun direction
+    // =========================================================================
+
+    private function buildSkyDome(SceneBuilder $builder): void
+    {
+        $center = new Vec3(0.0, -20.0, 0.0);
+        $radius = 350.0;
+
+        // Main sky sphere — overall azure
+        $builder->entity('SkyDome')
+            ->with(new Transform3D(
+                position: $center,
+                scale: new Vec3($radius, $radius, $radius),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_mid'));
+
+        // Upper dome — deeper blue toward zenith (slightly smaller, shifted up)
+        $builder->entity('SkyZenith')
+            ->with(new Transform3D(
+                position: new Vec3($center->x, $center->y + 40.0, $center->z),
+                scale: new Vec3($radius * 0.85, $radius * 0.7, $radius * 0.85),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_zenith'));
+
+        // Horizon band — warm haze where sky meets water/land
+        // Flattened, wide sphere sitting low to cover the horizon line
+        $builder->entity('SkyHorizon')
+            ->with(new Transform3D(
+                position: new Vec3($center->x, $center->y - 10.0, $center->z),
+                scale: new Vec3($radius * 1.05, $radius * 0.4, $radius * 1.05),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_horizon'));
+
+        // Sun-side warmth — hemisphere tinted warm near the sun
+        $builder->entity('SkySunSide')
+            ->with(new Transform3D(
+                position: new Vec3(20.0, 10.0, -120.0),
+                scale: new Vec3(180.0, 120.0, 80.0),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_sun_warm'));
     }
 
     private function buildLighting(SceneBuilder $builder): void
     {
-        // Sun light — direction points FROM sun TO scene (high up, slightly behind player)
+        // === PRIMARY SUN ===
+        // DirectionalLight direction = the direction light TRAVELS (from sky to ground).
+        // Sun position: high up (Y=70), slightly right (X=15), over ocean (Z=-60).
+        // Light must hit BOTH strand (Z=0..35) and water (Z=-10..-100).
+        // Direction: nearly straight down with slight angle — illuminates everything.
         $builder->entity('Sun')
             ->with(new Transform3D())
             ->with(new DirectionalLight(
-                direction: new Vec3(-0.3, -0.8, 0.3),
-                color: Color::hex('#fff8e8'),
-                intensity: 1.1,
+                direction: new Vec3(-0.2, -0.9, -0.1),
+                color: Color::hex('#FFFAF0'),
+                intensity: 1.5,
             ));
 
-        // Visible sun sphere high in the sky
+        // === VISIBLE SUN DISC === high over the ocean
         $builder->entity('SunDisc')
             ->with(new Transform3D(
-                position: new Vec3(40.0, 80.0, -40.0),
-                scale: new Vec3(6.0, 6.0, 6.0),
+                position: new Vec3(20.0, 65.0, -50.0),
+                scale: new Vec3(5.0, 5.0, 5.0),
             ))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_disc'));
 
-        // Sun glow halo (larger, dimmer sphere behind sun)
+        // Sun glow halo — larger, softer
         $builder->entity('SunGlow')
             ->with(new Transform3D(
-                position: new Vec3(40.0, 80.0, -41.0),
-                scale: new Vec3(12.0, 12.0, 12.0),
+                position: new Vec3(20.0, 65.0, -51.0),
+                scale: new Vec3(11.0, 11.0, 11.0),
             ))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_glow'));
 
+        // === FILL LIGHT from sky ===
+        // Simulates scattered blue skylight hitting surfaces facing away from sun
         $builder->entity('FillLight')
             ->with(new Transform3D())
             ->with(new DirectionalLight(
-                direction: new Vec3(0.5, -0.3, 0.2),
-                color: Color::hex('#b0d4f1'),
-                intensity: 0.25,
+                direction: new Vec3(0.3, -0.5, 0.3),
+                color: Color::hex('#B8D8F0'),
+                intensity: 0.3,
             ));
 
+        // === POINT LIGHTS for local warmth ===
         $builder->entity('SunsetGlow')
-            ->with(new Transform3D(position: new Vec3(40.0, 30.0, -30.0)))
+            ->with(new Transform3D(position: new Vec3(15.0, 15.0, -25.0)))
             ->with(new PointLight(
-                color: Color::hex('#ffcc77'),
-                intensity: 2.5,
+                color: Color::hex('#FFD494'),
+                intensity: 2.0,
                 radius: 60.0,
             ));
 
-        $builder->entity('ShoreGlow')
-            ->with(new Transform3D(position: new Vec3(0.0, 2.0, -5.0)))
+        // Beach area warm fill
+        $builder->entity('BeachLight')
+            ->with(new Transform3D(position: new Vec3(0.0, 8.0, 10.0)))
             ->with(new PointLight(
-                color: Color::hex('#aaddff'),
-                intensity: 0.6,
+                color: Color::hex('#FFF0D0'),
+                intensity: 1.0,
+                radius: 40.0,
+            ));
+
+        // Cool water reflection
+        $builder->entity('ShoreGlow')
+            ->with(new Transform3D(position: new Vec3(0.0, 2.0, -8.0)))
+            ->with(new PointLight(
+                color: Color::hex('#88CCEE'),
+                intensity: 0.5,
                 radius: 25.0,
             ));
     }
@@ -126,130 +221,243 @@ class PlaygroundScene extends Scene
     private function buildWind(SceneBuilder $builder): void
     {
         $wind = new Wind();
-        $wind->maxIntensity = 1.2;
+        $wind->maxIntensity = 1.0;
         $wind->minIntensity = 0.15;
-        $wind->gustFrequency = 0.25;
+        $wind->gustFrequency = 0.2;
         $builder->entity('WindController')
             ->with(new Transform3D())
             ->with($wind);
     }
 
+    // =========================================================================
+    //  TERRAIN — sand grain based beach
+    //  Thousands of individual grain instances with per-grain rotation.
+    //  Height function creates: slope to water, dune bumps, sand ripples.
+    //  Rendered via DrawMeshInstanced for GPU efficiency.
+    // =========================================================================
+
     private function buildTerrain(SceneBuilder $builder): void
     {
-        // Main sand beach
-        $builder->entity('Sand')
-            ->with(new Transform3D(
-                position: new Vec3(0.0, 0.0, 10.0),
-                scale: new Vec3(100.0, 1.0, 60.0),
-            ))
-            ->with(new MeshRenderer(meshId: 'plane', materialId: 'sand'));
-
-        // Sand color variations for visual depth (raised enough to avoid z-fighting)
-        $sandPatches = [
-            ['pos' => new Vec3(-8.0, 0.05, 6.0), 'scale' => new Vec3(12.0, 1.0, 8.0), 'mat' => 'sand_light'],
-            ['pos' => new Vec3(10.0, 0.06, 15.0), 'scale' => new Vec3(10.0, 1.0, 6.0), 'mat' => 'sand_warm'],
-            ['pos' => new Vec3(-15.0, 0.07, 18.0), 'scale' => new Vec3(8.0, 1.0, 10.0), 'mat' => 'sand_light'],
-            ['pos' => new Vec3(5.0, 0.08, 4.0), 'scale' => new Vec3(14.0, 1.0, 5.0), 'mat' => 'sand_dark'],
-            ['pos' => new Vec3(20.0, 0.05, 10.0), 'scale' => new Vec3(6.0, 1.0, 12.0), 'mat' => 'sand_warm'],
-        ];
-
-        foreach ($sandPatches as $i => $p) {
-            $builder->entity("SandPatch_{$i}")
-                ->with(new Transform3D(position: $p['pos'], scale: $p['scale']))
-                ->with(new MeshRenderer(meshId: 'plane', materialId: $p['mat']));
+        // Single terrain mesh with height baked into vertices
+        // Zone info encoded in UVs for the procedural sand shader
+        if (!MeshRegistry::has('beach_terrain')) {
+            MeshRegistry::register('beach_terrain', \App\Geometry\TerrainMesh::generate(
+                xMin: -55.0,
+                xMax: 55.0,
+                zMin: -13.0,
+                zMax: 40.0,
+                step: 0.25,
+                heightFn: fn(float $x, float $z) => $this->beachHeightFn($x, $z),
+            ));
         }
 
-        // Dunes — raised sand areas for 3D terrain feel
-        $dunes = [
-            ['pos' => new Vec3(-12.0, 0.6, 22.0), 'scale' => new Vec3(8.0, 1.2, 6.0)],
-            ['pos' => new Vec3(14.0, 0.4, 25.0), 'scale' => new Vec3(6.0, 0.8, 5.0)],
-            ['pos' => new Vec3(-22.0, 0.5, 18.0), 'scale' => new Vec3(5.0, 1.0, 4.0)],
-            ['pos' => new Vec3(25.0, 0.35, 15.0), 'scale' => new Vec3(7.0, 0.7, 5.0)],
-            ['pos' => new Vec3(0.0, 0.3, 30.0), 'scale' => new Vec3(10.0, 0.6, 8.0)],
-            ['pos' => new Vec3(-30.0, 0.45, 25.0), 'scale' => new Vec3(6.0, 0.9, 5.0)],
-        ];
+        $builder->entity('SandTerrain')
+            ->with(new Transform3D())
+            ->with(new MeshRenderer(meshId: 'beach_terrain', materialId: 'sand_terrain'));
 
-        foreach ($dunes as $i => $d) {
-            $builder->entity("Dune_{$i}")
-                ->with(new Transform3D(position: $d['pos'], scale: $d['scale']))
-                ->with(new MeshRenderer(meshId: 'sphere', materialId: ($i % 2 === 0) ? 'sand' : 'sand_warm'));
-        }
-
-        // Wet sand near shoreline (below main sand level to avoid z-fighting)
-        $builder->entity('WetSand')
-            ->with(new Transform3D(
-                position: new Vec3(0.0, -0.15, -5.0),
-                scale: new Vec3(100.0, 1.0, 8.0),
-            ))
-            ->with(new MeshRenderer(meshId: 'plane', materialId: 'wet_sand'));
-
-        // Tide line — thin darker strip (between sand and wet sand)
-        $builder->entity('TideLine')
-            ->with(new Transform3D(
-                position: new Vec3(0.0, -0.08, -1.5),
-                scale: new Vec3(100.0, 1.0, 0.5),
-            ))
-            ->with(new MeshRenderer(meshId: 'plane', materialId: 'tide_line'));
+        $this->buildTerrainColliders($builder);
     }
+
+    private function buildTerrainColliders(SceneBuilder $builder): void
+    {
+        // Main beach ground — flat plane from shore to dunes
+        $builder->entity('GroundMain')
+            ->with(new Transform3D(
+                position: new Vec3(0.0, -0.2, 13.0),
+            ))
+            ->with(new BoxCollider3D(
+                size: new Vec3(120.0, 0.4, 56.0),
+                isStatic: true,
+            ));
+
+        // Dune collision — raised area behind the beach
+        $builder->entity('GroundDuneLeft')
+            ->with(new Transform3D(
+                position: new Vec3(-18.0, 1.5, 30.0),
+            ))
+            ->with(new BoxCollider3D(
+                size: new Vec3(30.0, 3.0, 20.0),
+                isStatic: true,
+            ));
+
+        $builder->entity('GroundDuneCenter')
+            ->with(new Transform3D(
+                position: new Vec3(8.0, 2.0, 35.0),
+            ))
+            ->with(new BoxCollider3D(
+                size: new Vec3(25.0, 4.0, 20.0),
+                isStatic: true,
+            ));
+
+        $builder->entity('GroundDuneRight')
+            ->with(new Transform3D(
+                position: new Vec3(30.0, 1.2, 28.0),
+            ))
+            ->with(new BoxCollider3D(
+                size: new Vec3(25.0, 2.5, 18.0),
+                isStatic: true,
+            ));
+
+        // Ocean floor — player can swim above this
+        $builder->entity('OceanFloor')
+            ->with(new Transform3D(
+                position: new Vec3(0.0, -4.0, -40.0),
+            ))
+            ->with(new BoxCollider3D(
+                size: new Vec3(120.0, 0.5, 80.0),
+                isStatic: true,
+            ));
+    }
+
+    /**
+     * Beach height function — returns Y height and material for any (x, z).
+     *
+     * Zones (by Z):
+     *   Z > 10:   Dry back-beach, with dune bumps
+     *   Z 0..10:  Mid beach, gentle slope
+     *   Z -5..0:  Damp sand, steeper slope
+     *   Z < -5:   Wet sand at waterline
+     *
+     * @return array{y: float, material: string}
+     */
+    private function beachHeightFn(float $x, float $z): array
+    {
+        // Base slope: terrain rises in +Z direction (toward back-beach/dunes)
+        // Player starts at Z=12, sand slopes upward from there
+        // At Z=-10 (3m past the low point) → cliff drops off
+        $y = 0.0;
+        if ($z > 0.0) {
+            $y = $z * 0.02; // gentle uphill slope toward dunes
+        }
+        // Cliff: steep drop after Z=-10
+        if ($z < -10.0) {
+            $y -= (-10.0 - $z) * 2.0; // sharp drop-off
+        }
+
+        // === DUNES — distinct hills along the back beach ===
+        // Each dune is a Gaussian bump: height * exp(-((x-cx)^2/wx + (z-cz)^2/wz))
+        $dunes = [
+            // [centerX, centerZ, height, widthX, widthZ]
+            [-18.0, 30.0, 2.5, 80.0, 40.0],   // large left dune
+            [  8.0, 35.0, 3.0, 60.0, 50.0],    // tall center-right dune
+            [ 30.0, 28.0, 2.0, 70.0, 35.0],    // right dune
+            [-35.0, 25.0, 1.8, 50.0, 30.0],    // far left smaller dune
+            [  0.0, 22.0, 1.2, 90.0, 25.0],    // low wide ridge mid-beach
+            [-10.0, 38.0, 2.2, 55.0, 45.0],    // back-left peak
+            [ 22.0, 36.0, 2.8, 65.0, 55.0],    // back-right peak
+            [ 45.0, 32.0, 1.5, 45.0, 30.0],    // far right bump
+            [-45.0, 34.0, 1.6, 40.0, 35.0],    // far left bump
+        ];
+
+        foreach ($dunes as [$cx, $cz, $h, $wx, $wz]) {
+            $dx = $x - $cx;
+            $dz = $z - $cz;
+            $y += $h * exp(-($dx * $dx / $wx + $dz * $dz / $wz));
+        }
+
+        // Dune ridge lines — elongated ridges running roughly parallel to shore
+        if ($z > 15.0) {
+            $ridgeFactor = min(1.0, ($z - 15.0) / 10.0);
+            $ridge1 = 0.4 * $ridgeFactor * max(0.0, sin($x * 0.12 + 0.5)) * sin($z * 0.08 + 2.1);
+            $ridge2 = 0.25 * $ridgeFactor * max(0.0, sin($x * 0.09 + 3.7)) * sin($z * 0.06 + 0.8);
+            $y += $ridge1 + $ridge2;
+        }
+
+        // Sand ripples — small wave patterns across the whole beach
+        $ripple = sin($x * 2.5 + $z * 0.3) * 0.015
+                + sin($x * 0.7 + $z * 1.8) * 0.01;
+        $y += $ripple;
+
+        // Wind ripples — diagonal patterns, stronger on dune slopes
+        if ($z > 5.0) {
+            $windStrength = min(1.0, ($z - 5.0) / 20.0);
+            $windRipple = sin(($x + $z) * 3.0) * 0.008 * $windStrength
+                        + sin(($x * 0.8 - $z * 1.2) * 2.0) * 0.005 * $windStrength;
+            $y += $windRipple;
+        }
+
+        // Material based on zone + height
+        // Variant index from position → adjacent grains get different shades
+        $variant = abs((int) (floor($x * 7.3 + $z * 11.1) + floor($x * 3.7 - $z * 5.9))) % 4;
+
+        if ($z < -1.0) {
+            $material = "sand_damp_{$variant}";
+        } elseif ($z < 10.0) {
+            $material = "sand_mid_{$variant}";
+        } elseif ($y > 1.5) {
+            $material = "sand_dune_{$variant}";
+        } else {
+            $material = "sand_dry_{$variant}";
+        }
+
+        return ['y' => $y, 'material' => $material];
+    }
+
+    // =========================================================================
+    //  OCEAN — pixel-based water surface
+    //  Each water element is an individual pixel with its own tilt.
+    //  Material determined by depth (distance from shore).
+    //  Color comes from light absorption: shallow = sand visible, deep = dark.
+    // =========================================================================
 
     private function buildOceanAndWaves(SceneBuilder $builder): void
     {
-        // Deep ocean backdrop
-        $builder->entity('DeepOcean')
-            ->with(new Transform3D(
-                position: new Vec3(0.0, -0.6, -80.0),
-                scale: new Vec3(300.0, 1.0, 200.0),
-            ))
-            ->with(new MeshRenderer(meshId: 'plane', materialId: 'deep_water'));
-
-        // Animated wave strips
-        $waveCount = 20;
-        for ($i = 0; $i < $waveCount; $i++) {
-            $z = -8.0 - $i * 3.0;
-            $depth = $i / (float) $waveCount;
-
-            $wave = new WaveStrip();
-            $wave->phaseOffset = $i * 0.8;
-            $wave->amplitude = 0.2 + $depth * 0.4;
-            $wave->frequency = 1.2 + $depth * 0.3;
-            $wave->baseY = -0.25 - $depth * 0.3;
-
-            $matId = $depth < 0.3 ? 'water_shallow' : ($depth < 0.6 ? 'water' : 'water_deep');
-
-            $builder->entity("Wave_{$i}")
-                ->with(new Transform3D(
-                    position: new Vec3(0.0, $wave->baseY, $z),
-                    scale: new Vec3(100.0, 1.0, 3.2),
-                ))
-                ->with(new MeshRenderer(meshId: 'plane', materialId: $matId))
-                ->with($wave);
-
-            // Foam on every 3rd wave near shore
-            if ($i < 8 && $i % 2 === 0) {
-                $foam = new WaveStrip();
-                $foam->phaseOffset = $i * 0.8;
-                $foam->amplitude = 0.2 + $depth * 0.3;
-                $foam->frequency = 1.2 + $depth * 0.3;
-                $foam->baseY = -0.2 - $depth * 0.3;
-                $foam->isFoam = true;
-
-                $builder->entity("Foam_{$i}")
-                    ->with(new Transform3D(
-                        position: new Vec3(0.0, -10.0, $z + 0.5),
-                        scale: new Vec3(80.0, 1.0, 1.0),
-                    ))
-                    ->with(new MeshRenderer(meshId: 'plane', materialId: 'foam'))
-                    ->with($foam);
-            }
+        // Single subdivided plane with GPU wave animation
+        // 64x64 grid = 4096 vertices — enough for smooth waves
+        if (!MeshRegistry::has('water_plane')) {
+            MeshRegistry::register('water_plane', PlaneMesh::generate(140.0, 90.0, 64));
         }
 
-        // Shore foam — persistent white line at water's edge (above wet sand)
-        $builder->entity('ShoreFoam')
+        // Main water surface — semitransparent, positioned at shore level
+        $builder->entity('WaterSurface')
             ->with(new Transform3D(
-                position: new Vec3(0.0, -0.1, -8.0),
-                scale: new Vec3(100.0, 1.0, 1.2),
+                position: new Vec3(0.0, -0.3, -44.0),
             ))
-            ->with(new MeshRenderer(meshId: 'plane', materialId: 'shore_foam'));
+            ->with(new MeshRenderer(meshId: 'water_plane', materialId: 'water_surface'));
+
+        // Deeper water layer — slightly lower, darker, more opaque
+        $builder->entity('WaterDeep')
+            ->with(new Transform3D(
+                position: new Vec3(0.0, -0.6, -44.0),
+            ))
+            ->with(new MeshRenderer(meshId: 'water_plane', materialId: 'water_deep_plane'));
+    }
+
+    /**
+     * Water height and material function.
+     * Height: gentle swell patterns.
+     * Material: based on depth (distance from shore Z=-8).
+     *
+     * @return array{y: float, material: string}
+     */
+    private function waterHeightFn(float $x, float $z): array
+    {
+        // Base height — slight descent with depth
+        $depth = abs($z + 8.0); // distance from shore
+        $y = -0.25 - $depth * 0.004;
+
+        // Ocean swell — large slow waves
+        $swell = sin($x * 0.08 + $z * 0.12) * 0.15
+               + sin($x * 0.05 - $z * 0.08 + 1.3) * 0.1;
+        $y += $swell * min(1.0, $depth / 15.0); // swells grow with depth
+
+        // Smaller ripples
+        $ripple = sin($x * 0.5 + $z * 0.3) * 0.03
+                + sin($x * 0.3 - $z * 0.7 + 2.1) * 0.02;
+        $y += $ripple;
+
+        // Material by depth — smooth gradient through absorption colors
+        $t = min(1.0, $depth / 70.0); // 0 at shore, 1 at Z=-78
+
+        $materials = [
+            'water_crystal', 'water_turquoise', 'water_aqua', 'water_teal',
+            'water_blue', 'water_ocean', 'water_deep', 'water_navy',
+        ];
+
+        $matIndex = $t * (count($materials) - 1);
+        $material = $materials[(int) round($matIndex)];
+
+        return ['y' => $y, 'material' => $material];
     }
 
     private function buildPalmTrees(SceneBuilder $builder): void
@@ -268,93 +476,26 @@ class PlaygroundScene extends Scene
         ];
 
         foreach ($palms as $i => $palm) {
-            $pos = $palm['pos'];
-            $h = $palm['height'];
-            $lean = $palm['lean'];
-
-            // Trunk — lower section
-            $trunkSway = new PalmSway();
-            $trunkSway->swayStrength = 0.6 + fmod($i * 0.1, 0.4);
-            $trunkSway->phaseOffset = $i * 1.3;
-            $trunkSway->isTrunk = true;
-
-            $builder->entity("PalmTrunk_{$i}")
-                ->with(new Transform3D(
-                    position: new Vec3($pos->x, $h * 0.5, $pos->z),
-                    rotation: Quaternion::fromAxisAngle(new Vec3(0.0, 0.0, 1.0), $lean),
-                    scale: new Vec3(0.2, $h * 0.5, 0.2),
-                ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: ($i % 3 === 0) ? 'palm_trunk_dark' : 'palm_trunk'))
-                ->with($trunkSway)
-                ->with(new BoxCollider3D(size: new Vec3(0.8, 2.0, 0.8), offset: new Vec3(0.0, 0.0, 0.0), isStatic: true));
-
-            // Trunk rings for texture detail
-            for ($r = 0; $r < 3; $r++) {
-                $ringY = $h * 0.2 + $r * ($h * 0.25);
-                $builder->entity("TrunkRing_{$i}_{$r}")
-                    ->with(new Transform3D(
-                        position: new Vec3($pos->x, $ringY, $pos->z),
-                        scale: new Vec3(0.25, 0.06, 0.25),
-                    ))
-                    ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'palm_trunk_ring'));
-            }
-
-            // Canopy — multiple leaf clusters
-            $canopyBase = $h + 0.2;
-            $leafOffsets = [
-                new Vec3(0.0, 0.0, 0.0),
-                new Vec3(0.8, -0.2, 0.4),
-                new Vec3(-0.7, -0.3, -0.5),
-                new Vec3(0.3, -0.1, -0.8),
-                new Vec3(-0.5, -0.15, 0.7),
-            ];
-
-            foreach ($leafOffsets as $j => $off) {
-                $leafSway = new PalmSway();
-                $leafSway->swayStrength = 0.8 + ($j * 0.15);
-                $leafSway->phaseOffset = $i * 1.3 + $j * 0.7;
-                $leafSway->isTrunk = false;
-
-                $leafScale = $j === 0
-                    ? new Vec3(1.8, 0.4, 1.8)
-                    : new Vec3(1.2 + $j * 0.1, 0.25, 1.0 + $j * 0.1);
-
-                $matId = $j % 2 === 0 ? 'palm_leaves' : 'palm_leaves_light';
-
-                $builder->entity("PalmLeaf_{$i}_{$j}")
-                    ->with(new Transform3D(
-                        position: new Vec3(
-                            $pos->x + $off->x,
-                            $canopyBase + $off->y,
-                            $pos->z + $off->z,
-                        ),
-                        scale: $leafScale,
-                    ))
-                    ->with(new MeshRenderer(meshId: 'sphere', materialId: $matId))
-                    ->with($leafSway);
-            }
-
-            // Coconuts
-            if ($i % 3 === 0) {
-                for ($c = 0; $c < 3; $c++) {
-                    $angle = $c * 2.094;
-                    $builder->entity("Coconut_{$i}_{$c}")
-                        ->with(new Transform3D(
-                            position: new Vec3(
-                                $pos->x + cos($angle) * 0.5,
-                                $canopyBase - 0.5,
-                                $pos->z + sin($angle) * 0.5,
-                            ),
-                            scale: new Vec3(0.12, 0.12, 0.12),
-                        ))
-                        ->with(new MeshRenderer(meshId: 'sphere', materialId: 'coconut'));
-                }
-            }
+            (new PalmTree(
+                prefix: "Palm_{$i}",
+                basePos: $palm['pos'],
+                height: $palm['height'],
+                lean: $palm['lean'],
+                treeIndex: $i,
+            ))->build($builder);
         }
     }
 
     private function buildRocks(SceneBuilder $builder): void
     {
+        // Register unique deformed rock meshes — each seed creates a different shape
+        for ($i = 0; $i < 10; $i++) {
+            $meshId = "rock_mesh_{$i}";
+            if (!MeshRegistry::has($meshId)) {
+                MeshRegistry::register($meshId, \App\Geometry\RockMesh::generate(1.0, $i, 12, 16));
+            }
+        }
+
         $rocks = [
             ['pos' => new Vec3(-4.0, 0.4, -3.0), 'scale' => new Vec3(1.5, 1.0, 1.2), 'mat' => 'rock'],
             ['pos' => new Vec3(5.0, 0.25, -5.0), 'scale' => new Vec3(0.9, 0.6, 1.0), 'mat' => 'rock_dark'],
@@ -381,113 +522,137 @@ class PlaygroundScene extends Scene
                     rotation: $rotation,
                     scale: $rock['scale'],
                 ))
-                ->with(new MeshRenderer(meshId: ($i % 3 === 0) ? 'sphere' : 'box', materialId: $rock['mat']))
-                ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+                ->with(new MeshRenderer(meshId: "rock_mesh_{$i}", materialId: $rock['mat']))
+                ->with(new BoxCollider3D(size: new Vec3($rock['scale']->x * 1.2, $rock['scale']->y * 1.2, $rock['scale']->z * 1.2), isStatic: true));
         }
     }
 
     private function buildBeachDetails(SceneBuilder $builder): void
     {
-        // Shells scattered on the beach
-        $shells = [
-            new Vec3(1.0, 0.03, 3.0), new Vec3(-3.0, 0.03, 7.0),
-            new Vec3(6.0, 0.03, 5.0), new Vec3(-7.0, 0.03, 1.0),
-            new Vec3(4.0, 0.03, 10.0), new Vec3(-1.5, 0.03, 8.0),
-            new Vec3(10.0, 0.03, 6.0), new Vec3(-5.0, 0.03, 11.0),
-            new Vec3(2.5, 0.03, 14.0), new Vec3(-9.0, 0.03, 4.0),
-            new Vec3(7.5, 0.03, 13.0), new Vec3(-11.0, 0.03, 6.0),
-        ];
-
-        foreach ($shells as $i => $pos) {
-            $matId = $i % 3 === 0 ? 'shell_pink' : ($i % 3 === 1 ? 'shell' : 'shell_cream');
-            $builder->entity("Shell_{$i}")
-                ->with(new Transform3D(
-                    position: $pos,
-                    rotation: Quaternion::fromEuler(0.0, $i * 1.2, 0.0),
-                    scale: new Vec3(0.06 + ($i % 3) * 0.02, 0.03, 0.08 + ($i % 2) * 0.02),
-                ))
-                ->with(new MeshRenderer(meshId: 'sphere', materialId: $matId));
-        }
-
-        // Driftwood pieces
-        $driftwood = [
-            ['pos' => new Vec3(-5.0, 0.08, -2.0), 'rot' => 0.7, 'len' => 2.0],
-            ['pos' => new Vec3(8.0, 0.06, 3.0), 'rot' => -0.4, 'len' => 1.5],
-            ['pos' => new Vec3(-2.0, 0.07, -4.0), 'rot' => 1.2, 'len' => 1.8],
-            ['pos' => new Vec3(15.0, 0.05, 1.0), 'rot' => 0.3, 'len' => 1.2],
-        ];
-
-        foreach ($driftwood as $i => $dw) {
-            $builder->entity("Driftwood_{$i}")
-                ->with(new Transform3D(
-                    position: $dw['pos'],
-                    rotation: Quaternion::fromEuler(0.0, $dw['rot'], 0.1),
-                    scale: new Vec3(0.08, 0.06, $dw['len'] * 0.5),
-                ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'driftwood'));
-        }
-
-        // Seaweed patches near waterline
-        for ($i = 0; $i < 8; $i++) {
-            $builder->entity("Seaweed_{$i}")
-                ->with(new Transform3D(
-                    position: new Vec3(-20.0 + $i * 6.0 + sin($i) * 2.0, -0.06, -6.5 + cos($i) * 1.0),
-                    scale: new Vec3(0.8 + sin($i) * 0.3, 1.0, 0.4),
-                ))
-                ->with(new MeshRenderer(meshId: 'plane', materialId: 'seaweed'));
-        }
+        // Shells, driftwood and seaweed removed — need proper tiny-scale meshes first
     }
+
+    // =========================================================================
+    //  CLOUDS — reference: real cumulus clouds
+    //  Very flat (width:height = 8:1), large (30-60m span), soft overlapping
+    //  puffs (15-25 spheres each), bright white tops, slight gray undersides
+    // =========================================================================
 
     private function buildClouds(SceneBuilder $builder): void
     {
+        // Register unique cloud puff meshes
+        for ($i = 0; $i < 6; $i++) {
+            $meshId = "cloud_puff_{$i}";
+            if (!MeshRegistry::has($meshId)) {
+                MeshRegistry::register($meshId, \App\Geometry\CloudPuffMesh::generate($i));
+            }
+        }
+
+        // Each cloud: center position + spread parameters
         $clouds = [
-            ['x' => -30.0, 'y' => 35.0, 'z' => -60.0, 'speed' => 1.5, 'parts' => 5],
-            ['x' => 10.0, 'y' => 40.0, 'z' => -50.0, 'speed' => 1.0, 'parts' => 4],
-            ['x' => 50.0, 'y' => 38.0, 'z' => -70.0, 'speed' => 1.8, 'parts' => 6],
-            ['x' => -60.0, 'y' => 42.0, 'z' => -55.0, 'speed' => 0.8, 'parts' => 5],
-            ['x' => 30.0, 'y' => 36.0, 'z' => -65.0, 'speed' => 1.3, 'parts' => 4],
-            ['x' => -15.0, 'y' => 44.0, 'z' => -80.0, 'speed' => 0.6, 'parts' => 7],
-            ['x' => 70.0, 'y' => 37.0, 'z' => -45.0, 'speed' => 1.6, 'parts' => 5],
-            ['x' => -45.0, 'y' => 39.0, 'z' => -75.0, 'speed' => 0.9, 'parts' => 4],
-            ['x' => 5.0, 'y' => 43.0, 'z' => -90.0, 'speed' => 0.7, 'parts' => 6],
-            ['x' => -70.0, 'y' => 41.0, 'z' => -58.0, 'speed' => 1.1, 'parts' => 5],
-            ['x' => 45.0, 'y' => 45.0, 'z' => -85.0, 'speed' => 0.5, 'parts' => 4],
-            ['x' => -50.0, 'y' => 34.0, 'z' => -42.0, 'speed' => 2.0, 'parts' => 3],
+            ['x' => -25.0, 'y' => 45.0, 'z' => -50.0, 'speed' => 0.8, 'size' => 1.0],
+            ['x' => 30.0,  'y' => 50.0, 'z' => -65.0, 'speed' => 0.5, 'size' => 1.3],
+            ['x' => -55.0, 'y' => 48.0, 'z' => -55.0, 'speed' => 0.7, 'size' => 0.9],
+            ['x' => 65.0,  'y' => 52.0, 'z' => -70.0, 'speed' => 0.4, 'size' => 1.1],
+            ['x' => 5.0,   'y' => 46.0, 'z' => -80.0, 'speed' => 0.6, 'size' => 1.4],
+            ['x' => -40.0, 'y' => 55.0, 'z' => -90.0, 'speed' => 0.3, 'size' => 1.2],
+            ['x' => 50.0,  'y' => 44.0, 'z' => -45.0, 'speed' => 0.9, 'size' => 0.8],
+            ['x' => -70.0, 'y' => 47.0, 'z' => -60.0, 'speed' => 0.6, 'size' => 1.0],
+            ['x' => 15.0,  'y' => 53.0, 'z' => -75.0, 'speed' => 0.35, 'size' => 1.5],
+            ['x' => -10.0, 'y' => 42.0, 'z' => -40.0, 'speed' => 1.0, 'size' => 0.7],
         ];
 
         foreach ($clouds as $ci => $cloud) {
-            for ($p = 0; $p < $cloud['parts']; $p++) {
-                $offsetX = (sin($p * 2.1 + $ci) * 3.0);
-                $offsetY = (cos($p * 1.7) * 1.0);
-                $offsetZ = (sin($p * 0.9 + $ci * 0.5) * 2.0);
+            $sz = $cloud['size'];
+            // Build each cloud from many overlapping, very flat spheres
+            $puffs = $this->generateCloudPuffs($ci, $sz);
 
-                $scaleX = 3.0 + sin($p * 1.3 + $ci) * 1.5;
-                $scaleY = 1.0 + cos($p * 0.8) * 0.5;
-                $scaleZ = 2.5 + cos($p * 1.7 + $ci) * 1.0;
-
+            foreach ($puffs as $pi => $puff) {
                 $drift = new CloudDrift();
                 $drift->speed = $cloud['speed'];
-                $drift->resetMinX = -100.0;
-                $drift->resetMaxX = 100.0;
-                $drift->bobAmplitude = 0.2 + $p * 0.05;
-                $drift->bobFrequency = 0.15 + $ci * 0.02;
-                $drift->phaseOffset = $ci * 2.0 + $p * 0.5;
+                $drift->resetMinX = -120.0;
+                $drift->resetMaxX = 120.0;
+                $drift->bobAmplitude = 0.1 + $pi * 0.01;
+                $drift->bobFrequency = 0.08 + $ci * 0.01;
+                $drift->phaseOffset = $ci * 1.5 + $pi * 0.3;
 
-                $matId = ($p + $ci) % 3 === 0 ? 'cloud_bright' : (($p + $ci) % 3 === 1 ? 'cloud' : 'cloud_shadow');
+                // Top puffs bright, bottom ones shadowed
+                $matId = $puff['y'] > 0.0 ? 'cloud_top' : 'cloud_base';
+                if ($pi < 3) {
+                    $matId = 'cloud_bright';
+                }
 
-                $builder->entity("Cloud_{$ci}_{$p}")
+                $puffMeshId = 'cloud_puff_' . (($ci + $pi) % 6);
+
+                $builder->entity("Cloud_{$ci}_{$pi}")
                     ->with(new Transform3D(
                         position: new Vec3(
-                            $cloud['x'] + $offsetX,
-                            $cloud['y'] + $offsetY,
-                            $cloud['z'] + $offsetZ,
+                            $cloud['x'] + $puff['x'],
+                            $cloud['y'] + $puff['y'],
+                            $cloud['z'] + $puff['z'],
                         ),
-                        scale: new Vec3($scaleX, $scaleY, $scaleZ),
+                        scale: new Vec3($puff['sx'], $puff['sy'], $puff['sz']),
                     ))
-                    ->with(new MeshRenderer(meshId: 'sphere', materialId: $matId))
+                    ->with(new MeshRenderer(meshId: $puffMeshId, materialId: $matId))
                     ->with($drift);
             }
         }
+    }
+
+    /**
+     * Generate puff positions/scales for one cloud.
+     * Real cumulus: wide flat base, rounded bumpy top.
+     */
+    private function generateCloudPuffs(int $seed, float $size): array
+    {
+        $puffs = [];
+
+        // Core mass — large flat ellipsoids forming the base
+        $coreCount = 6;
+        for ($i = 0; $i < $coreCount; $i++) {
+            $angle = ($i / $coreCount) * 2.0 * M_PI + $seed * 0.5;
+            $r = 3.0 + sin($seed + $i * 1.7) * 1.5;
+            $puffs[] = [
+                'x' => cos($angle) * $r * $size,
+                'y' => -0.3 + sin($i * 0.8) * 0.3,
+                'z' => sin($angle) * $r * 0.7 * $size,
+                'sx' => (5.0 + sin($seed + $i) * 2.0) * $size,
+                'sy' => (1.0 + cos($i * 1.3) * 0.3) * $size,
+                'sz' => (4.0 + cos($seed + $i) * 1.5) * $size,
+            ];
+        }
+
+        // Top bumps — smaller puffs on top creating cauliflower shape
+        $bumpCount = 8;
+        for ($i = 0; $i < $bumpCount; $i++) {
+            $angle = ($i / $bumpCount) * 2.0 * M_PI + $seed * 1.1;
+            $r = 2.0 + sin($seed * 2 + $i * 2.3) * 1.5;
+            $puffs[] = [
+                'x' => cos($angle) * $r * $size,
+                'y' => 0.8 + sin($i * 1.1 + $seed) * 0.5,
+                'z' => sin($angle) * $r * 0.6 * $size,
+                'sx' => (3.0 + sin($seed + $i * 0.9) * 1.0) * $size,
+                'sy' => (1.2 + cos($i * 1.5) * 0.4) * $size,
+                'sz' => (2.5 + cos($seed + $i * 0.7) * 0.8) * $size,
+            ];
+        }
+
+        // Wispy edges — small flat spheres around the perimeter
+        $edgeCount = 5;
+        for ($i = 0; $i < $edgeCount; $i++) {
+            $angle = ($i / $edgeCount) * 2.0 * M_PI + $seed * 0.3;
+            $r = 5.0 + sin($seed + $i * 3.1) * 1.0;
+            $puffs[] = [
+                'x' => cos($angle) * $r * $size,
+                'y' => -0.2 + sin($i * 2.1) * 0.2,
+                'z' => sin($angle) * $r * 0.5 * $size,
+                'sx' => (2.5 + sin($i * 1.4) * 0.5) * $size,
+                'sy' => (0.5 + cos($i * 0.9) * 0.15) * $size,
+                'sz' => (2.0 + cos($i * 1.2) * 0.4) * $size,
+            ];
+        }
+
+        return $puffs;
     }
 
     private function registerMeshes(): void
@@ -496,7 +661,8 @@ class PlaygroundScene extends Scene
             MeshRegistry::register('box', BoxMesh::generate(2.0, 2.0, 2.0));
         }
         if (!MeshRegistry::has('sphere')) {
-            MeshRegistry::register('sphere', SphereMesh::generate(1.0, 20, 30));
+            // Higher tessellation for smoother clouds and water
+            MeshRegistry::register('sphere', SphereMesh::generate(1.0, 24, 36));
         }
         if (!MeshRegistry::has('plane')) {
             MeshRegistry::register('plane', PlaneMesh::generate(1.0, 1.0));
@@ -504,177 +670,371 @@ class PlaygroundScene extends Scene
         if (!MeshRegistry::has('cylinder')) {
             MeshRegistry::register('cylinder', CylinderMesh::generate(1.0, 2.0, 16));
         }
+        if (!MeshRegistry::has('sand_grain')) {
+            // Flat box — individual grain, rendered thousands of times via instancing
+            MeshRegistry::register('sand_grain', BoxMesh::generate(1.0, 1.0, 1.0));
+        }
     }
 
     private function registerMaterials(): void
     {
-        // Sand variants
-        MaterialRegistry::register('sand', new Material(
-            albedo: Color::hex('#deb887'),
-            roughness: 0.95,
+        // ======================
+        //  SKY DOME — emission-only, self-lit
+        //  Reference: real tropical sky gradient
+        //  Zenith: deep blue #1E5FAA
+        //  Mid: azure #4A90D9
+        //  Horizon: warm haze #C8DCF0
+        // ======================
+
+        MaterialRegistry::register('sky_zenith', new Material(
+            albedo: Color::hex('#000000'),
+            roughness: 1.0,
+            emission: Color::hex('#1E5FAA'),
         ));
-        MaterialRegistry::register('sand_light', new Material(
-            albedo: Color::hex('#f0dbb0'),
+        MaterialRegistry::register('sky_mid', new Material(
+            albedo: Color::hex('#000000'),
+            roughness: 1.0,
+            emission: Color::hex('#4A90D9'),
+        ));
+        MaterialRegistry::register('sky_horizon', new Material(
+            albedo: Color::hex('#000000'),
+            roughness: 1.0,
+            emission: Color::hex('#87AECC'),
+        ));
+        MaterialRegistry::register('sky_sun_warm', new Material(
+            albedo: Color::hex('#000000'),
+            roughness: 1.0,
+            emission: Color::hex('#E8D8C0'),
+        ));
+
+        // ======================
+        //  SAND — multiple shades per zone for grain texture
+        //  Each zone has 4 variants: base, lighter, darker, warm/cool shift
+        //  Adjacent grains get different variants → visible texture
+        // ======================
+
+        // ======================
+        //  SAND — high contrast grain texture
+        //  Each zone has 4 variants with STRONG color differences.
+        //  Variant 3 = dark mineral grain (quartz, feldspar, mica)
+        //  to create visible speckle pattern even from distance.
+        // ======================
+
+        // Dry sand — warm beige base, one dark speckle variant
+        MaterialRegistry::register('sand_dry_0', new Material(albedo: Color::hex('#D4B87A'), roughness: 0.95));
+        MaterialRegistry::register('sand_dry_1', new Material(albedo: Color::hex('#C4A462'), roughness: 0.93));
+        MaterialRegistry::register('sand_dry_2', new Material(albedo: Color::hex('#E0C48C'), roughness: 0.96));
+        MaterialRegistry::register('sand_dry_3', new Material(albedo: Color::hex('#8B7340'), roughness: 0.90));
+
+        // Mid sand — golden, more contrast
+        MaterialRegistry::register('sand_mid_0', new Material(albedo: Color::hex('#B89050'), roughness: 0.90));
+        MaterialRegistry::register('sand_mid_1', new Material(albedo: Color::hex('#A07838'), roughness: 0.88));
+        MaterialRegistry::register('sand_mid_2', new Material(albedo: Color::hex('#C89858'), roughness: 0.91));
+        MaterialRegistry::register('sand_mid_3', new Material(albedo: Color::hex('#6B5528'), roughness: 0.85));
+
+        // Damp sand — dark ochre/brown
+        MaterialRegistry::register('sand_damp_0', new Material(albedo: Color::hex('#7A5E2A'), roughness: 0.65));
+        MaterialRegistry::register('sand_damp_1', new Material(albedo: Color::hex('#684E20'), roughness: 0.63));
+        MaterialRegistry::register('sand_damp_2', new Material(albedo: Color::hex('#8A6830'), roughness: 0.67));
+        MaterialRegistry::register('sand_damp_3', new Material(albedo: Color::hex('#4A3818'), roughness: 0.60));
+
+        // Dune tops — lighter but still with contrast
+        MaterialRegistry::register('sand_dune_0', new Material(albedo: Color::hex('#DCC080'), roughness: 0.95));
+        MaterialRegistry::register('sand_dune_1', new Material(albedo: Color::hex('#E8CC90'), roughness: 0.96));
+        MaterialRegistry::register('sand_dune_2', new Material(albedo: Color::hex('#D0B470'), roughness: 0.94));
+        MaterialRegistry::register('sand_dune_3', new Material(albedo: Color::hex('#9A8048'), roughness: 0.92));
+        MaterialRegistry::register('tide_wrack', new Material(
+            albedo: Color::hex('#7A6B50'),
+            roughness: 0.8,
+        ));
+
+        // Procedural terrain — base color, actual coloring done by sand shader
+        MaterialRegistry::register('sand_terrain', new Material(
+            albedo: Color::hex('#C4A868'),
             roughness: 0.92,
         ));
-        MaterialRegistry::register('sand_warm', new Material(
-            albedo: Color::hex('#d4a862'),
-            roughness: 0.93,
+
+        // Shore blend — wet sand visible through thin water layer
+        // Progressively darker as water depth increases, gaining reflectivity
+        MaterialRegistry::register('shore_blend_1', new Material(
+            albedo: Color::hex('#8A7D6B'),
+            roughness: 0.15,
+            metallic: 0.35,
         ));
-        MaterialRegistry::register('sand_dark', new Material(
-            albedo: Color::hex('#c49a5c'),
-            roughness: 0.96,
+        MaterialRegistry::register('shore_blend_2', new Material(
+            albedo: Color::hex('#7E7568'),
+            roughness: 0.1,
+            metallic: 0.45,
+        ));
+        MaterialRegistry::register('shore_blend_3', new Material(
+            albedo: Color::hex('#908578'),
+            roughness: 0.06,
+            metallic: 0.55,
         ));
 
-        // Wet sand / tide
-        MaterialRegistry::register('wet_sand', new Material(
-            albedo: Color::hex('#a08050'),
-            roughness: 0.5,
-            metallic: 0.1,
+        // Player body
+        MaterialRegistry::register('player_body', new Material(
+            albedo: Color::hex('#4A7A8C'),
+            roughness: 0.8,
         ));
-        MaterialRegistry::register('tide_line', new Material(
-            albedo: Color::hex('#8b7040'),
-            roughness: 0.4,
-            metallic: 0.15,
-        ));
-
-        // Sun
-        MaterialRegistry::register('sun_disc', new Material(
-            albedo: Color::hex('#fffde0'),
-            roughness: 1.0,
-            emission: Color::hex('#ffee88'),
-        ));
-        MaterialRegistry::register('sun_glow', new Material(
-            albedo: Color::hex('#fff8cc'),
-            roughness: 1.0,
-            emission: Color::hex('#aa8833'),
+        MaterialRegistry::register('player_shoe', new Material(
+            albedo: Color::hex('#3B2F2F'),
+            roughness: 0.9,
         ));
 
         // Footprints
         MaterialRegistry::register('footprint', new Material(
-            albedo: Color::hex('#9a7a4a'),
+            albedo: Color::hex('#B8975A'),
             roughness: 0.85,
         ));
 
-        // Water variants
-        MaterialRegistry::register('water_shallow', new Material(
-            albedo: Color::hex('#2a9baa'),
-            roughness: 0.05,
-            metallic: 0.4,
+        // Sun — very bright emissive
+        MaterialRegistry::register('sun_disc', new Material(
+            albedo: Color::hex('#FFFFFF'),
+            roughness: 1.0,
+            emission: Color::hex('#FFFF99'),
         ));
-        MaterialRegistry::register('water', new Material(
-            albedo: Color::hex('#1a7b9a'),
-            roughness: 0.08,
-            metallic: 0.35,
-        ));
-        MaterialRegistry::register('water_deep', new Material(
-            albedo: Color::hex('#0a4b6a'),
-            roughness: 0.1,
-            metallic: 0.3,
-        ));
-        MaterialRegistry::register('deep_water', new Material(
-            albedo: Color::hex('#052a4a'),
-            roughness: 0.12,
-            metallic: 0.25,
+        MaterialRegistry::register('sun_glow', new Material(
+            albedo: Color::hex('#FFFDE0'),
+            roughness: 1.0,
+            emission: Color::hex('#DDBB44'),
         ));
 
-        // Foam
-        MaterialRegistry::register('foam', new Material(
-            albedo: Color::hex('#e8f0f8'),
+        // ==============================
+        //  WATER — real tropical gradient
+        //  Crystal shore: #7FDBDA
+        //  Turquoise: #40E0D0
+        //  Aqua: #20B2AA
+        //  Teal: #1A8A8A
+        //  Blue: #0077BE
+        //  Ocean: #005A8E
+        //  Deep: #003F6B
+        //  Navy: #002244
+        //  Abyss: #001122
+        // ==============================
+
+        // ==============================
+        //  WATER — physically-based approach
+        //  Water is nearly colorless. What we see:
+        //  - Shallow: sand underneath shows through (warm grey-tan)
+        //  - Medium: red light absorbed → remaining green-blue tint
+        //  - Deep: most light absorbed → very dark blue-grey
+        //  High metallic + low roughness = specular highlights from sun/sky
+        // ==============================
+
+        // Shore — sand visible through thin water film
+        MaterialRegistry::register('water_crystal', new Material(
+            albedo: Color::hex('#9B9080'),
+            roughness: 0.05,
+            metallic: 0.6,
+        ));
+        // Shallow — slight green-blue, sand still faintly visible
+        MaterialRegistry::register('water_turquoise', new Material(
+            albedo: Color::hex('#6B7B72'),
+            roughness: 0.04,
+            metallic: 0.65,
+        ));
+        // Moderate — red fully absorbed, green-blue dominant
+        MaterialRegistry::register('water_aqua', new Material(
+            albedo: Color::hex('#4A6B65'),
+            roughness: 0.04,
+            metallic: 0.7,
+        ));
+        // Deeper — less light returns, darker grey-teal
+        MaterialRegistry::register('water_teal', new Material(
+            albedo: Color::hex('#3A5550'),
+            roughness: 0.05,
+            metallic: 0.7,
+        ));
+        // Mid-ocean — blue-grey, losing brightness
+        MaterialRegistry::register('water_blue', new Material(
+            albedo: Color::hex('#2A4048'),
+            roughness: 0.06,
+            metallic: 0.75,
+        ));
+        // Open ocean — dark grey with blue shift
+        MaterialRegistry::register('water_ocean', new Material(
+            albedo: Color::hex('#1E3038'),
+            roughness: 0.07,
+            metallic: 0.75,
+        ));
+        // Deep — very little light returns
+        MaterialRegistry::register('water_deep', new Material(
+            albedo: Color::hex('#142428'),
+            roughness: 0.08,
+            metallic: 0.8,
+        ));
+        // Navy — almost all light absorbed
+        MaterialRegistry::register('water_navy', new Material(
+            albedo: Color::hex('#0C1820'),
+            roughness: 0.1,
+            metallic: 0.8,
+        ));
+        // Abyss — near black
+        MaterialRegistry::register('ocean_abyss', new Material(
+            albedo: Color::hex('#060E14'),
+            roughness: 0.12,
+            metallic: 0.8,
+        ));
+
+        // Animated water plane materials — semitransparent
+        MaterialRegistry::register('water_surface', new Material(
+            albedo: Color::hex('#3A8B9B'),
+            roughness: 0.02,
+            metallic: 0.8,
+            alpha: 0.55,
+        ));
+        MaterialRegistry::register('water_deep_plane', new Material(
+            albedo: Color::hex('#1A3848'),
+            roughness: 0.05,
+            metallic: 0.7,
+            alpha: 0.7,
+        ));
+
+        // Underwater volume — dark sandy/silty layers beneath surface
+        MaterialRegistry::register('seafloor', new Material(
+            albedo: Color::hex('#2A2A20'),
+            roughness: 0.95,
+        ));
+        MaterialRegistry::register('underwater_shallow', new Material(
+            albedo: Color::hex('#1A2820'),
             roughness: 0.9,
+        ));
+        MaterialRegistry::register('underwater_mid', new Material(
+            albedo: Color::hex('#101C18'),
+            roughness: 0.9,
+        ));
+        MaterialRegistry::register('underwater_deep', new Material(
+            albedo: Color::hex('#080E0C'),
+            roughness: 0.9,
+        ));
+
+        // Foam — real ocean foam is bright white
+        MaterialRegistry::register('foam', new Material(
+            albedo: Color::hex('#FFFFFF'),
+            roughness: 0.95,
+            emission: Color::hex('#444444'),
+        ));
+        MaterialRegistry::register('foam_thin', new Material(
+            albedo: Color::hex('#E0F0F8'),
+            roughness: 0.85,
             emission: Color::hex('#222222'),
         ));
-        MaterialRegistry::register('shore_foam', new Material(
-            albedo: Color::hex('#d0e8f0'),
-            roughness: 0.8,
-            emission: Color::hex('#111111'),
-        ));
 
-        // Palm trunk variants
+        // Palm trunks
         MaterialRegistry::register('palm_trunk', new Material(
-            albedo: Color::hex('#5a3a1a'),
+            albedo: Color::hex('#5A3A1A'),
             roughness: 0.92,
         ));
         MaterialRegistry::register('palm_trunk_dark', new Material(
-            albedo: Color::hex('#3d2510'),
+            albedo: Color::hex('#3D2510'),
             roughness: 0.95,
         ));
         MaterialRegistry::register('palm_trunk_ring', new Material(
-            albedo: Color::hex('#4a2e14'),
+            albedo: Color::hex('#4A2E14'),
             roughness: 0.88,
         ));
 
-        // Palm leaves variants
+        // Palm branch stems
+        MaterialRegistry::register('palm_branch', new Material(
+            albedo: Color::hex('#4A6B2A'),
+            roughness: 0.85,
+        ));
+
+        // Palm leaves
         MaterialRegistry::register('palm_leaves', new Material(
-            albedo: Color::hex('#2d6b2d'),
+            albedo: Color::hex('#2D6B2D'),
             roughness: 0.8,
         ));
         MaterialRegistry::register('palm_leaves_light', new Material(
-            albedo: Color::hex('#3d8b3d'),
+            albedo: Color::hex('#3D8B3D'),
             roughness: 0.75,
         ));
 
         // Coconuts
         MaterialRegistry::register('coconut', new Material(
-            albedo: Color::hex('#5c3b10'),
+            albedo: Color::hex('#5C3B10'),
             roughness: 0.7,
         ));
 
-        // Rock variants
+        // Rocks
         MaterialRegistry::register('rock', new Material(
-            albedo: Color::hex('#4a4a4a'),
+            albedo: Color::hex('#4A4A4A'),
             roughness: 0.85,
         ));
         MaterialRegistry::register('rock_dark', new Material(
-            albedo: Color::hex('#2e2e2e'),
+            albedo: Color::hex('#2E2E2E'),
             roughness: 0.9,
         ));
         MaterialRegistry::register('rock_mossy', new Material(
-            albedo: Color::hex('#3a4a35'),
+            albedo: Color::hex('#3A4A35'),
             roughness: 0.88,
         ));
 
         // Shells
         MaterialRegistry::register('shell', new Material(
-            albedo: Color::hex('#e8dcc8'),
+            albedo: Color::hex('#E8DCC8'),
             roughness: 0.6,
         ));
         MaterialRegistry::register('shell_pink', new Material(
-            albedo: Color::hex('#e8c8c0'),
+            albedo: Color::hex('#E8C8C0'),
             roughness: 0.55,
         ));
         MaterialRegistry::register('shell_cream', new Material(
-            albedo: Color::hex('#f0e8d0'),
+            albedo: Color::hex('#F0E8D0'),
             roughness: 0.65,
         ));
 
         // Driftwood
         MaterialRegistry::register('driftwood', new Material(
-            albedo: Color::hex('#8b7355'),
+            albedo: Color::hex('#8B7355'),
             roughness: 0.9,
         ));
 
         // Seaweed
         MaterialRegistry::register('seaweed', new Material(
-            albedo: Color::hex('#1a4a2a'),
+            albedo: Color::hex('#1A4A2A'),
             roughness: 0.75,
         ));
 
-        // Clouds
-        MaterialRegistry::register('cloud', new Material(
-            albedo: Color::hex('#f0f0f5'),
-            roughness: 1.0,
-            emission: Color::hex('#333333'),
-        ));
+        // ======================
+        //  CLOUDS — real cumulus
+        //  Bright top: pure white with strong emission
+        //  Mid: off-white
+        //  Base/shadow: light gray
+        // ======================
+
         MaterialRegistry::register('cloud_bright', new Material(
-            albedo: Color::hex('#ffffff'),
+            albedo: Color::hex('#FFFFFF'),
             roughness: 1.0,
-            emission: Color::hex('#444444'),
+            emission: Color::hex('#AAAAAA'),
+            alpha: 0.9,
         ));
-        MaterialRegistry::register('cloud_shadow', new Material(
-            albedo: Color::hex('#c0c5d0'),
+        MaterialRegistry::register('cloud_top', new Material(
+            albedo: Color::hex('#F8F8FF'),
             roughness: 1.0,
-            emission: Color::hex('#222222'),
+            emission: Color::hex('#888888'),
+            alpha: 0.85,
+        ));
+        MaterialRegistry::register('cloud_base', new Material(
+            albedo: Color::hex('#D0D5DD'),
+            roughness: 1.0,
+            emission: Color::hex('#555566'),
+            alpha: 0.8,
+        ));
+
+        // Foam already registered above — override with alpha versions
+        MaterialRegistry::register('foam', new Material(
+            albedo: Color::hex('#FFFFFF'),
+            roughness: 0.95,
+            emission: Color::hex('#333344'),
+
+        ));
+        MaterialRegistry::register('foam_thin', new Material(
+            albedo: Color::hex('#E8F4FF'),
+            roughness: 0.9,
+            emission: Color::hex('#222233'),
+
         ));
     }
 }
