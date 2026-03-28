@@ -21,7 +21,7 @@
         }
     },
     "repositories": [
-        { "type": "vcs", "url": "https://github.com/hmennen90/phpolygon" }
+        { "type": "vcs", "url": "https://github.com/phpolygon/phpolygon" }
     ],
     "minimum-stability": "dev",
     "prefer-stable": true
