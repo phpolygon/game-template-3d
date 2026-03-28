@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\System\AmbientAudioSystem;
+use App\System\CloudSystem;
 use App\System\FirstPersonCameraSystem;
+use App\System\FootprintSystem;
+use App\System\PalmSwaySystem;
+use App\System\WaveSystem;
+use App\System\WindSystem;
+use PHPolygon\Audio\AudioManager;
+use PHPolygon\Audio\Backend\PHPGLFWAudioBackend;
 use PHPolygon\Engine;
 use PHPolygon\EngineConfig;
 use PHPolygon\System\Camera3DSystem;
@@ -30,7 +38,21 @@ class Game
             $commandList = $engine->commandList3D;
             $config = $engine->getConfig();
 
+            // Audio with real backend
+            $audioBackend = PHPGLFWAudioBackend::isAvailable()
+                ? new PHPGLFWAudioBackend()
+                : null;
+            $audioManager = $audioBackend
+                ? new AudioManager($audioBackend)
+                : $engine->audio;
+
             $engine->world->addSystem(new FirstPersonCameraSystem($engine->input, $engine->window));
+            $engine->world->addSystem(new WindSystem());
+            $engine->world->addSystem(new PalmSwaySystem());
+            $engine->world->addSystem(new WaveSystem());
+            $engine->world->addSystem(new FootprintSystem());
+            $engine->world->addSystem(new CloudSystem());
+            $engine->world->addSystem(new AmbientAudioSystem($audioManager, $config->assetsPath));
             $engine->world->addSystem(new Transform3DSystem());
             $engine->world->addSystem(new Physics3DSystem());
             $engine->world->addSystem(new Camera3DSystem($commandList, $config->width, $config->height));

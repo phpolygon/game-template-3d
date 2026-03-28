@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\System;
 
 use App\Component\FirstPersonCamera;
+use PHPolygon\Component\CharacterController3D;
 use PHPolygon\Component\Transform3D;
 use PHPolygon\ECS\AbstractSystem;
 use PHPolygon\ECS\World;
@@ -15,10 +16,13 @@ use PHPolygon\Runtime\Window;
 
 class FirstPersonCameraSystem extends AbstractSystem
 {
+    private const JUMP_FORCE = 6.0;
+
     private bool $cursorCaptured = false;
     private float $lastMouseX = 0.0;
     private float $lastMouseY = 0.0;
     private bool $firstMouse = true;
+    private bool $initialCaptureDone = false;
 
     public function __construct(
         private readonly InputInterface $input,
@@ -31,9 +35,20 @@ class FirstPersonCameraSystem extends AbstractSystem
             $transform = $world->getComponent($entity->id, Transform3D::class);
             $camera = $world->getComponent($entity->id, FirstPersonCamera::class);
 
-            // Toggle mouse capture with right click
-            if ($this->input->isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
-                $this->cursorCaptured = !$this->cursorCaptured;
+            // Auto-capture mouse on first frame
+            if (!$this->initialCaptureDone) {
+                $this->cursorCaptured = true;
+                $this->firstMouse = true;
+                $this->initialCaptureDone = true;
+            }
+
+            // Escape releases mouse, left click re-captures
+            if ($this->input->isKeyPressed(GLFW_KEY_ESCAPE)) {
+                $this->cursorCaptured = false;
+                $this->firstMouse = true;
+            }
+            if (!$this->cursorCaptured && $this->input->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+                $this->cursorCaptured = true;
                 $this->firstMouse = true;
             }
 
@@ -100,6 +115,16 @@ class FirstPersonCameraSystem extends AbstractSystem
                     $move->z / $moveLen * $camera->moveSpeed * $dt,
                 );
                 $transform->position = $transform->position->add($move);
+            }
+
+            // Jump — Space key sets upward velocity via CharacterController3D
+            $controller = $world->tryGetComponent($entity->id, CharacterController3D::class);
+            if ($controller !== null && $controller->isGrounded && $this->input->isKeyPressed(GLFW_KEY_SPACE)) {
+                $controller->velocity = new Vec3(
+                    $controller->velocity->x,
+                    self::JUMP_FORCE,
+                    $controller->velocity->z,
+                );
             }
         }
     }

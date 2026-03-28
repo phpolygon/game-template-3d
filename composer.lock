@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpolygon/phpolygon.git",
-                "reference": "f88b23d33b681863ddffa87c66e22cb69f4c87d7"
+                "reference": "5d5579f97095e283c9fa8a48d92930aca2c4ee4a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpolygon/phpolygon/zipball/f88b23d33b681863ddffa87c66e22cb69f4c87d7",
-                "reference": "f88b23d33b681863ddffa87c66e22cb69f4c87d7",
+                "url": "https://api.github.com/repos/phpolygon/phpolygon/zipball/5d5579f97095e283c9fa8a48d92930aca2c4ee4a",
+                "reference": "5d5579f97095e283c9fa8a48d92930aca2c4ee4a",
                 "shasum": ""
             },
             "require": {
@@ -57,7 +57,7 @@
                 "source": "https://github.com/phpolygon/phpolygon/tree/main",
                 "issues": "https://github.com/phpolygon/phpolygon/issues"
             },
-            "time": "2026-03-28T09:01:18+00:00"
+            "time": "2026-03-28T10:17:37+00:00"
         }
     ],
     "packages-dev": [

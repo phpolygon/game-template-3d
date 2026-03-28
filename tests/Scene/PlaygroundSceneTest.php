@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Scene;
 
+use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
+use App\Component\PalmSway;
+use App\Component\WaveStrip;
+use App\Component\Wind;
 use App\Scene\PlaygroundScene;
 use PHPUnit\Framework\TestCase;
 use PHPolygon\Component\Camera3DComponent;
@@ -47,9 +51,9 @@ class PlaygroundSceneTest extends TestCase
         $this->assertSame('plane', $sand->meshId);
         $this->assertSame('sand', $sand->materialId);
 
-        $this->assertArrayHasKey('Ocean', $map);
-        $ocean = $world->getComponent($map['Ocean'], MeshRenderer::class);
-        $this->assertSame('water', $ocean->materialId);
+        $this->assertArrayHasKey('DeepOcean', $map);
+        $ocean = $world->getComponent($map['DeepOcean'], MeshRenderer::class);
+        $this->assertSame('deep_water', $ocean->materialId);
     }
 
     public function testSceneHasPalmTrees(): void
@@ -57,23 +61,23 @@ class PlaygroundSceneTest extends TestCase
         ['world' => $world, 'map' => $map] = $this->buildScene();
 
         $trunkCount = 0;
-        $canopyCount = 0;
+        $leafCount = 0;
         foreach ($map as $name => $id) {
             if (str_starts_with($name, 'PalmTrunk_')) {
                 $mesh = $world->getComponent($id, MeshRenderer::class);
                 $this->assertSame('cylinder', $mesh->meshId);
-                $this->assertSame('palm_trunk', $mesh->materialId);
+                $this->assertTrue($world->hasComponent($id, PalmSway::class));
                 $trunkCount++;
             }
-            if (str_starts_with($name, 'PalmCanopy_')) {
+            if (str_starts_with($name, 'PalmLeaf_')) {
                 $mesh = $world->getComponent($id, MeshRenderer::class);
                 $this->assertSame('sphere', $mesh->meshId);
-                $this->assertSame('palm_leaves', $mesh->materialId);
-                $canopyCount++;
+                $this->assertTrue($world->hasComponent($id, PalmSway::class));
+                $leafCount++;
             }
         }
-        $this->assertSame(6, $trunkCount);
-        $this->assertSame($trunkCount, $canopyCount);
+        $this->assertSame(10, $trunkCount);
+        $this->assertGreaterThan($trunkCount, $leafCount);
     }
 
     public function testSceneHasRocks(): void
@@ -87,7 +91,7 @@ class PlaygroundSceneTest extends TestCase
                 $rockCount++;
             }
         }
-        $this->assertGreaterThanOrEqual(7, $rockCount);
+        $this->assertGreaterThanOrEqual(10, $rockCount);
     }
 
     public function testSceneHasSunlight(): void
@@ -109,7 +113,48 @@ class PlaygroundSceneTest extends TestCase
     public function testSceneClearColorIsSkyBlue(): void
     {
         $config = (new PlaygroundScene())->getConfig();
-        // Sky blue: #87ceeb
         $this->assertGreaterThan(0.4, $config->clearColor->b);
+    }
+
+    public function testSceneHasWindController(): void
+    {
+        ['world' => $world, 'map' => $map] = $this->buildScene();
+
+        $this->assertArrayHasKey('WindController', $map);
+        $this->assertTrue($world->hasComponent($map['WindController'], Wind::class));
+    }
+
+    public function testSceneHasWaves(): void
+    {
+        ['world' => $world, 'map' => $map] = $this->buildScene();
+
+        $waveCount = 0;
+        $foamCount = 0;
+        foreach ($map as $name => $id) {
+            if (str_starts_with($name, 'Wave_')) {
+                $this->assertTrue($world->hasComponent($id, WaveStrip::class));
+                $waveCount++;
+            }
+            if (str_starts_with($name, 'Foam_')) {
+                $this->assertTrue($world->hasComponent($id, WaveStrip::class));
+                $foamCount++;
+            }
+        }
+        $this->assertGreaterThanOrEqual(15, $waveCount);
+        $this->assertGreaterThanOrEqual(2, $foamCount);
+    }
+
+    public function testSceneHasClouds(): void
+    {
+        ['world' => $world, 'map' => $map] = $this->buildScene();
+
+        $cloudCount = 0;
+        foreach ($map as $name => $id) {
+            if (str_starts_with($name, 'Cloud_')) {
+                $this->assertTrue($world->hasComponent($id, CloudDrift::class));
+                $cloudCount++;
+            }
+        }
+        $this->assertGreaterThanOrEqual(30, $cloudCount);
     }
 }
