@@ -63,8 +63,8 @@ class FirstPersonCameraSystem extends AbstractSystem
             $transform->rotation = $rotation;
 
             // WASD movement relative to camera direction
-            $forward = $rotation->mulVec3(new Vec3(0.0, 0.0, -1.0));
-            $right = $rotation->mulVec3(new Vec3(1.0, 0.0, 0.0));
+            $forward = $rotation->rotateVec3(new Vec3(0.0, 0.0, -1.0));
+            $right = $rotation->rotateVec3(new Vec3(1.0, 0.0, 0.0));
 
             // Flatten to XZ plane for movement
             $forward = new Vec3($forward->x, 0.0, $forward->z);

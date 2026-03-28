@@ -28,11 +28,12 @@ class Game
 
         $engine->onInit(function (Engine $engine) {
             $commandList = $engine->commandList3D;
+            $config = $engine->getConfig();
 
             $engine->world->addSystem(new FirstPersonCameraSystem($engine->input, $engine->window));
             $engine->world->addSystem(new Transform3DSystem());
             $engine->world->addSystem(new Physics3DSystem());
-            $engine->world->addSystem(new Camera3DSystem($commandList));
+            $engine->world->addSystem(new Camera3DSystem($commandList, $config->width, $config->height));
             $engine->world->addSystem(new Renderer3DSystem(
                 $engine->renderer3D,
                 $commandList,
