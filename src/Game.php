@@ -17,7 +17,7 @@ class Game
     public static function run(): void
     {
         $engine = new Engine(new EngineConfig(
-            title: 'PHPolygon 3D — Procedural Playground',
+            title: 'PHPolygon 3D — Beach',
             width: 1280,
             height: 720,
             targetTickRate: 60.0,
@@ -44,7 +44,7 @@ class Game
 
         $engine->onUpdate(function (Engine $engine, float $dt) {
             $fps = $engine->gameLoop->getAverageFps();
-            $engine->window->setTitle(sprintf('PHPolygon 3D — %.0f FPS', $fps));
+            $engine->window->setTitle(sprintf('PHPolygon 3D — Beach — %.0f FPS', $fps));
         });
 
         $engine->run();

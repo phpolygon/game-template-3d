@@ -1,8 +1,8 @@
 # PHPolygon 3D Game Template
 
-A procedural playground starter project built with [PHPolygon](https://github.com/hmennen90/phpolygon).
+A procedural beach world built with [PHPolygon](https://github.com/phpolygon/phpolygon).
 
-All geometry is generated from PHP code — no external 3D model files.
+Walk around a sunny beach with palm trees, rocks, and ocean — all generated from PHP code.
 
 ## Getting Started
 
@@ -16,19 +16,19 @@ php game.php
 
 | Key | Action |
 |-----|--------|
-| WASD | Move |
+| WASD | Walk around |
 | Right Click | Toggle mouse look |
 | Mouse | Look around (when captured) |
 | Escape | Quit |
 
 ## What's Included
 
+- Sandy beach with wet shoreline and ocean
+- 6 palm trees (cylinder trunks + sphere canopies)
+- 7 scattered rock formations
+- Warm directional sunlight + sunset glow point light
 - First-person camera with mouse look
-- Procedural ground plane (50x50)
-- 5 scattered boxes with different materials (brick, metal, wood)
-- 3 emissive spheres with colored point lights
-- Directional sunlight
-- Gravity via CharacterController3D
+- CharacterController3D with gravity
 
 ## Project Structure
 

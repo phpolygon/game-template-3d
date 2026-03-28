@@ -18,78 +18,98 @@ use PHPolygon\Scene\SceneBuilder;
 
 class PlaygroundSceneTest extends TestCase
 {
-    public function testSceneMaterializesPlayer(): void
+    private function buildScene(): array
     {
         $world = new World();
-        $scene = new PlaygroundScene();
         $builder = new SceneBuilder();
-        $scene->build($builder);
-        $entityMap = $builder->materialize($world);
-
-        $this->assertArrayHasKey('Player', $entityMap);
-        $playerId = $entityMap['Player'];
-        $this->assertTrue($world->hasComponent($playerId, Transform3D::class));
-        $this->assertTrue($world->hasComponent($playerId, Camera3DComponent::class));
-        $this->assertTrue($world->hasComponent($playerId, CharacterController3D::class));
-        $this->assertTrue($world->hasComponent($playerId, FirstPersonCamera::class));
+        (new PlaygroundScene())->build($builder);
+        return ['world' => $world, 'map' => $builder->materialize($world)];
     }
 
-    public function testSceneHasGround(): void
+    public function testSceneHasPlayer(): void
     {
-        $world = new World();
-        $scene = new PlaygroundScene();
-        $builder = new SceneBuilder();
-        $scene->build($builder);
-        $entityMap = $builder->materialize($world);
+        ['world' => $world, 'map' => $map] = $this->buildScene();
 
-        $this->assertArrayHasKey('Ground', $entityMap);
-        $groundId = $entityMap['Ground'];
-        $this->assertTrue($world->hasComponent($groundId, MeshRenderer::class));
-
-        $mesh = $world->getComponent($groundId, MeshRenderer::class);
-        $this->assertSame('plane', $mesh->meshId);
-        $this->assertSame('ground', $mesh->materialId);
+        $this->assertArrayHasKey('Player', $map);
+        $id = $map['Player'];
+        $this->assertTrue($world->hasComponent($id, Transform3D::class));
+        $this->assertTrue($world->hasComponent($id, Camera3DComponent::class));
+        $this->assertTrue($world->hasComponent($id, CharacterController3D::class));
+        $this->assertTrue($world->hasComponent($id, FirstPersonCamera::class));
     }
 
-    public function testSceneHasDirectionalLight(): void
+    public function testSceneHasSandAndOcean(): void
     {
-        $world = new World();
-        $scene = new PlaygroundScene();
-        $builder = new SceneBuilder();
-        $scene->build($builder);
-        $entityMap = $builder->materialize($world);
+        ['world' => $world, 'map' => $map] = $this->buildScene();
 
-        $this->assertArrayHasKey('Sun', $entityMap);
-        $this->assertTrue($world->hasComponent($entityMap['Sun'], DirectionalLight::class));
+        $this->assertArrayHasKey('Sand', $map);
+        $sand = $world->getComponent($map['Sand'], MeshRenderer::class);
+        $this->assertSame('plane', $sand->meshId);
+        $this->assertSame('sand', $sand->materialId);
+
+        $this->assertArrayHasKey('Ocean', $map);
+        $ocean = $world->getComponent($map['Ocean'], MeshRenderer::class);
+        $this->assertSame('water', $ocean->materialId);
     }
 
-    public function testSceneHasBoxes(): void
+    public function testSceneHasPalmTrees(): void
     {
-        $world = new World();
-        $scene = new PlaygroundScene();
-        $builder = new SceneBuilder();
-        $scene->build($builder);
-        $entityMap = $builder->materialize($world);
+        ['world' => $world, 'map' => $map] = $this->buildScene();
 
-        for ($i = 0; $i < 5; $i++) {
-            $this->assertArrayHasKey("Box_{$i}", $entityMap);
-            $this->assertTrue($world->hasComponent($entityMap["Box_{$i}"], MeshRenderer::class));
+        $trunkCount = 0;
+        $canopyCount = 0;
+        foreach ($map as $name => $id) {
+            if (str_starts_with($name, 'PalmTrunk_')) {
+                $mesh = $world->getComponent($id, MeshRenderer::class);
+                $this->assertSame('cylinder', $mesh->meshId);
+                $this->assertSame('palm_trunk', $mesh->materialId);
+                $trunkCount++;
+            }
+            if (str_starts_with($name, 'PalmCanopy_')) {
+                $mesh = $world->getComponent($id, MeshRenderer::class);
+                $this->assertSame('sphere', $mesh->meshId);
+                $this->assertSame('palm_leaves', $mesh->materialId);
+                $canopyCount++;
+            }
         }
+        $this->assertSame(6, $trunkCount);
+        $this->assertSame($trunkCount, $canopyCount);
     }
 
-    public function testSceneHasLightSpheres(): void
+    public function testSceneHasRocks(): void
     {
-        $world = new World();
-        $scene = new PlaygroundScene();
-        $builder = new SceneBuilder();
-        $scene->build($builder);
-        $entityMap = $builder->materialize($world);
+        ['world' => $world, 'map' => $map] = $this->buildScene();
 
-        for ($i = 0; $i < 3; $i++) {
-            $this->assertArrayHasKey("LightSphere_{$i}", $entityMap);
-            $id = $entityMap["LightSphere_{$i}"];
-            $this->assertTrue($world->hasComponent($id, MeshRenderer::class));
-            $this->assertTrue($world->hasComponent($id, PointLight::class));
+        $rockCount = 0;
+        foreach ($map as $name => $id) {
+            if (str_starts_with($name, 'Rock_')) {
+                $this->assertTrue($world->hasComponent($id, MeshRenderer::class));
+                $rockCount++;
+            }
         }
+        $this->assertGreaterThanOrEqual(7, $rockCount);
+    }
+
+    public function testSceneHasSunlight(): void
+    {
+        ['world' => $world, 'map' => $map] = $this->buildScene();
+
+        $this->assertArrayHasKey('Sun', $map);
+        $this->assertTrue($world->hasComponent($map['Sun'], DirectionalLight::class));
+    }
+
+    public function testSceneHasSunsetGlow(): void
+    {
+        ['world' => $world, 'map' => $map] = $this->buildScene();
+
+        $this->assertArrayHasKey('SunsetGlow', $map);
+        $this->assertTrue($world->hasComponent($map['SunsetGlow'], PointLight::class));
+    }
+
+    public function testSceneClearColorIsSkyBlue(): void
+    {
+        $config = (new PlaygroundScene())->getConfig();
+        // Sky blue: #87ceeb
+        $this->assertGreaterThan(0.4, $config->clearColor->b);
     }
 }
