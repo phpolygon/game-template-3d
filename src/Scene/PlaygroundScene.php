@@ -11,9 +11,8 @@ use App\Prefab\SandGrain;
 use App\Prefab\WaterPixel;
 use PHPolygon\Component\InstancedTerrain;
 use PHPolygon\Math\Mat4;
-use PHPolygon\Prefab\PalmTree;
-use App\Component\Wind;
 use PHPolygon\Component\BoxCollider3D;
+use App\Component\Wind;
 use PHPolygon\Component\Camera3DComponent;
 use PHPolygon\Component\CharacterController3D;
 use PHPolygon\Component\DirectionalLight;
@@ -258,6 +257,115 @@ class PlaygroundScene extends Scene
         $this->buildTerrainColliders($builder);
     }
 
+    /**
+     * Build a curved palm trunk from multiple short cylinder segments.
+     * Returns the crown position at the top.
+     */
+    private function buildCurvedTrunk(SceneBuilder $builder, int $index, Vec3 $base, float $height, float $lean): Vec3
+    {
+        $segments = 8;
+
+        // Curve control
+        $curveX = $lean * 0.6;
+        $curveZ = sin($index * 2.3) * 0.08;
+        $sBend = cos($index * 1.7) * 0.12;
+
+        // Pre-compute all joint positions along the curve
+        $joints = [];
+        for ($s = 0; $s <= $segments; $s++) {
+            $t = (float) $s / $segments;
+            $ox = $curveX * $t * $t + $sBend * sin($t * M_PI) * $t;
+            $oz = $curveZ * $t * $t;
+            $joints[] = new Vec3(
+                $base->x + $ox * $height,
+                $base->y + $t * $height,
+                $base->z + $oz * $height,
+            );
+        }
+
+        // Build segments between consecutive joints
+        for ($s = 0; $s < $segments; $s++) {
+            $bot = $joints[$s];
+            $top = $joints[$s + 1];
+            $tMid = ((float) $s + 0.5) / $segments;
+
+            // Direction vector
+            $dx = $top->x - $bot->x;
+            $dy = $top->y - $bot->y;
+            $dz = $top->z - $bot->z;
+            $segLen = sqrt($dx * $dx + $dy * $dy + $dz * $dz);
+            if ($segLen < 0.001) continue;
+
+            // Align cylinder Y-axis to segment direction using axis-angle
+            $dirX = $dx / $segLen;
+            $dirY = $dy / $segLen;
+            $dirZ = $dz / $segLen;
+
+            // Rotation from Y-up (0,1,0) to direction via cross product
+            // cross(Y, dir) = (dirZ, 0, -dirX), angle = acos(dirY)
+            $dot = $dirY; // dot(Y, dir)
+            $dot = max(-1.0, min(1.0, $dot));
+            $angle = acos($dot);
+            $axisX = $dirZ;
+            $axisZ = -$dirX;
+            $axisLen = sqrt($axisX * $axisX + $axisZ * $axisZ);
+
+            if ($axisLen > 0.0001) {
+                $rotation = Quaternion::fromAxisAngle(
+                    new Vec3($axisX / $axisLen, 0.0, $axisZ / $axisLen),
+                    $angle,
+                );
+            } else {
+                $rotation = Quaternion::identity();
+            }
+
+            // Center = midpoint between joints
+            $center = new Vec3(
+                ($bot->x + $top->x) * 0.5,
+                ($bot->y + $top->y) * 0.5,
+                ($bot->z + $top->z) * 0.5,
+            );
+
+            // Radius tapers
+            $radius = 0.19 - $tMid * 0.08;
+
+            $matId = ($s < 4) ? 'palm_trunk' : (($index % 2 === 0) ? 'palm_trunk' : 'palm_trunk_dark');
+
+            // Scale Y to exactly match joint-to-joint distance (cylinder height = 2*scaleY)
+            $builder->entity("Palm_{$index}_Trunk_{$s}")
+                ->with(new Transform3D(
+                    position: $center,
+                    rotation: $rotation,
+                    scale: new Vec3($radius, $segLen * 0.52, $radius),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: $matId));
+
+            // Rings at joints
+            if ($s === 2 || $s === 4 || $s === 6) {
+                $builder->entity("Palm_{$index}_Ring_{$s}")
+                    ->with(new Transform3D(
+                        position: $bot,
+                        rotation: $rotation,
+                        scale: new Vec3($radius + 0.04, 0.035, $radius + 0.04),
+                    ))
+                    ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'palm_trunk_ring'));
+            }
+        }
+
+        // Trunk collider
+        $midJoint = $joints[(int) ($segments / 2)];
+        $builder->entity("Palm_{$index}_Collider")
+            ->with(new Transform3D(
+                position: new Vec3($midJoint->x, $base->y + $height * 0.5, $midJoint->z),
+            ))
+            ->with(new BoxCollider3D(
+                size: new Vec3(0.9, $height, 0.9),
+                isStatic: true,
+            ));
+
+        return $joints[$segments];
+    }
+
     private function buildTerrainColliders(SceneBuilder $builder): void
     {
         // Main beach ground — flat plane from shore to dunes
@@ -462,6 +570,14 @@ class PlaygroundScene extends Scene
 
     private function buildPalmTrees(SceneBuilder $builder): void
     {
+        // Register frond meshes — 4 variations
+        for ($v = 0; $v < 4; $v++) {
+            $meshId = "palm_frond_{$v}";
+            if (!MeshRegistry::has($meshId)) {
+                MeshRegistry::register($meshId, \App\Geometry\PalmFrondMesh::generate(2.5, 12, $v));
+            }
+        }
+
         $palms = [
             ['pos' => new Vec3(-6.0, 0.0, 5.0), 'height' => 5.5, 'lean' => 0.15],
             ['pos' => new Vec3(8.0, 0.0, 7.0), 'height' => 6.0, 'lean' => -0.1],
@@ -476,13 +592,67 @@ class PlaygroundScene extends Scene
         ];
 
         foreach ($palms as $i => $palm) {
-            (new PalmTree(
-                prefix: "Palm_{$i}",
-                basePos: $palm['pos'],
-                height: $palm['height'],
-                lean: $palm['lean'],
-                treeIndex: $i,
-            ))->build($builder);
+            $crownPos = $this->buildCurvedTrunk($builder, $i, $palm['pos'], $palm['height'], $palm['lean']);
+
+            // Crown base sphere
+            $builder->entity("Palm_{$i}_CrownBase")
+                ->with(new Transform3D(
+                    position: $crownPos,
+                    scale: new Vec3(0.28, 0.22, 0.28),
+                ))
+                ->with(new MeshRenderer(meshId: 'sphere', materialId: 'palm_trunk'));
+
+            // Custom feathered fronds — 14 per tree for a full crown
+            $frondCount = 14;
+            $frondLength = 2.2 + ($palm['height'] - 4.5) * 0.25;
+            $yawOffset = $i * 0.55;
+
+            for ($f = 0; $f < $frondCount; $f++) {
+                $yaw = ($f / $frondCount) * M_PI * 2.0 + $yawOffset;
+                $yaw += sin($f * 2.7 + $i * 1.3) * 0.18; // jitter
+
+                // Elevation — fronds droop outward, mostly horizontal to slightly down
+                $elevation = -0.15 - sin($f * 1.9 + $i * 0.7) * 0.15;
+
+                // Length variation
+                $len = $frondLength * (0.85 + sin($f * 3.1 + $i) * 0.15);
+
+                $rotation = Quaternion::fromEuler($elevation, $yaw, 0.0);
+
+                $matId = ($i % 2 === 0) ? 'palm_leaves' : 'palm_leaves_light';
+                // Mix in some dead/brown fronds
+                if (($f + $i) % 7 === 0) {
+                    $matId = 'palm_branch'; // olive/brown
+                }
+
+                $meshVariant = ($i + $f) % 4;
+
+                $builder->entity("Palm_{$i}_Frond_{$f}")
+                    ->with(new Transform3D(
+                        position: $crownPos,
+                        rotation: $rotation,
+                        scale: new Vec3($len * 0.5, $len * 0.5, $len * 0.5),
+                    ))
+                    ->with(new MeshRenderer(meshId: "palm_frond_{$meshVariant}", materialId: $matId));
+            }
+
+            // Coconuts on some trees
+            if ($i % 3 === 0) {
+                $coconutCount = 2 + ($i % 2);
+                for ($c = 0; $c < $coconutCount; $c++) {
+                    $cAngle = ($c / $coconutCount) * M_PI * 2.0 + $i * 1.5;
+                    $builder->entity("Palm_{$i}_Coconut_{$c}")
+                        ->with(new Transform3D(
+                            position: new Vec3(
+                                $crownPos->x + cos($cAngle) * 0.3,
+                                $crownPos->y - 0.35,
+                                $crownPos->z + sin($cAngle) * 0.3,
+                            ),
+                            scale: new Vec3(0.11, 0.13, 0.11),
+                        ))
+                        ->with(new MeshRenderer(meshId: 'sphere', materialId: 'coconut'));
+                }
+            }
         }
     }
 
