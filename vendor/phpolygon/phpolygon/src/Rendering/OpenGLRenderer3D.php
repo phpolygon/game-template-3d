@@ -139,6 +139,11 @@ class OpenGLRenderer3D implements Renderer3DInterface
         $this->width  = $width;
         $this->height = $height;
         glViewport($x, $y, $width, $height);
+
+        // Resize post-processing FBO to match
+        if ($this->postProcess !== null) {
+            $this->postProcess->resize($width, $height);
+        }
     }
 
     public function getWidth(): int { return $this->width; }
