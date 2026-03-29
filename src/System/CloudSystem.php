@@ -170,17 +170,17 @@ class CloudSystem extends AbstractSystem
         $alpha = min(0.95, 0.8 + $stormIntensity * 0.15);
 
         MaterialRegistry::register('cloud_bright', new Material(
-            albedo: new Color(0, 0, 0),
+            albedo: new Color(0.0, 0.0, 0.0),
             emission: new Color($bright * 0.67, $bright * 0.67, $bright * 0.67),
             alpha: min(0.95, 0.9 + $stormIntensity * 0.05),
         ));
         MaterialRegistry::register('cloud_top', new Material(
-            albedo: new Color(0, 0, 0),
+            albedo: new Color(0.0, 0.0, 0.0),
             emission: new Color($bright * 0.53, $bright * 0.53, $bright * 0.53),
             alpha: min(0.92, 0.85 + $stormIntensity * 0.07),
         ));
         MaterialRegistry::register('cloud_base', new Material(
-            albedo: new Color(0, 0, 0),
+            albedo: new Color(0.0, 0.0, 0.0),
             emission: new Color($bright * 0.33, $bright * 0.34, $bright * 0.40),
             alpha: $alpha,
         ));

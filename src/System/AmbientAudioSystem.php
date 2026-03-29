@@ -234,8 +234,9 @@ class AmbientAudioSystem extends AbstractSystem
         $this->seagullTimer += $dt;
 
         if ($this->seagullTimer >= $this->seagullInterval && $stormIntensity < 0.3) {
+            $elapsed = $this->seagullTimer; // capture before reset for variation seed
             $this->seagullTimer = 0.0;
-            $this->seagullInterval = 6.0 + sin($this->seagullTimer * 0.3) * 4.0;
+            $this->seagullInterval = 6.0 + sin($elapsed * 0.3) * 4.0;
             $volume = 0.2 * (1.0 - $stormIntensity);
             $this->audio->playSfx('seagulls', $volume);
         }

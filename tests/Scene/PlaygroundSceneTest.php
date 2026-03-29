@@ -46,14 +46,14 @@ class PlaygroundSceneTest extends TestCase
     {
         ['world' => $world, 'map' => $map] = $this->buildScene();
 
-        $this->assertArrayHasKey('Sand', $map);
-        $sand = $world->getComponent($map['Sand'], MeshRenderer::class);
-        $this->assertSame('plane', $sand->meshId);
-        $this->assertSame('sand_dry', $sand->materialId);
+        $this->assertArrayHasKey('SandTerrain', $map);
+        $sand = $world->getComponent($map['SandTerrain'], MeshRenderer::class);
+        $this->assertSame('beach_terrain', $sand->meshId);
+        $this->assertSame('sand_terrain', $sand->materialId);
 
-        $this->assertArrayHasKey('DeepOcean', $map);
-        $ocean = $world->getComponent($map['DeepOcean'], MeshRenderer::class);
-        $this->assertSame('ocean_abyss', $ocean->materialId);
+        $this->assertArrayHasKey('WaterDeep', $map);
+        $ocean = $world->getComponent($map['WaterDeep'], MeshRenderer::class);
+        $this->assertSame('water_deep_plane', $ocean->materialId);
     }
 
     public function testSceneHasPalmTrees(): void
@@ -61,32 +61,24 @@ class PlaygroundSceneTest extends TestCase
         ['world' => $world, 'map' => $map] = $this->buildScene();
 
         $trunkCount = 0;
-        $stemCount = 0;
-        $leafCount = 0;
+        $frondCount = 0;
         foreach ($map as $name => $id) {
-            if (str_contains($name, '_TrunkLower') || str_contains($name, '_TrunkUpper')) {
+            // PalmBuilder uses _T_0 through _T_11 for trunk segments
+            if (preg_match('/Palm_\d+_T_\d+/', $name)) {
                 $mesh = $world->getComponent($id, MeshRenderer::class);
                 $this->assertSame('cylinder', $mesh->meshId);
-                $this->assertTrue($world->hasComponent($id, PalmSway::class));
                 $trunkCount++;
             }
-            if (str_contains($name, '_Stem')) {
-                $mesh = $world->getComponent($id, MeshRenderer::class);
-                $this->assertSame('cylinder', $mesh->meshId);
+            // PalmBuilder uses _F_0 through _F_29 for fronds
+            if (preg_match('/Palm_\d+_F_\d+/', $name)) {
                 $this->assertTrue($world->hasComponent($id, PalmSway::class));
-                $stemCount++;
-            }
-            if (str_contains($name, '_Leaf_')) {
-                $mesh = $world->getComponent($id, MeshRenderer::class);
-                $this->assertSame('box', $mesh->meshId);
-                $this->assertTrue($world->hasComponent($id, PalmSway::class));
-                $leafCount++;
+                $frondCount++;
             }
         }
-        // 10 palms × 2 trunk segments (lower + upper) = 20
-        $this->assertSame(20, $trunkCount);
-        $this->assertGreaterThan(0, $stemCount);
-        $this->assertGreaterThan(0, $leafCount);
+        // 10 palms × 12 trunk segments = 120
+        $this->assertSame(120, $trunkCount);
+        // 10 palms × 30 fronds = 300
+        $this->assertSame(300, $frondCount);
     }
 
     public function testSceneHasRocks(): void
@@ -137,20 +129,11 @@ class PlaygroundSceneTest extends TestCase
     {
         ['world' => $world, 'map' => $map] = $this->buildScene();
 
-        $waveCount = 0;
-        $foamCount = 0;
-        foreach ($map as $name => $id) {
-            if (str_starts_with($name, 'Wave_')) {
-                $this->assertTrue($world->hasComponent($id, WaveStrip::class));
-                $waveCount++;
-            }
-            if (str_starts_with($name, 'Foam_')) {
-                $this->assertTrue($world->hasComponent($id, WaveStrip::class));
-                $foamCount++;
-            }
-        }
-        $this->assertGreaterThanOrEqual(15, $waveCount);
-        $this->assertGreaterThanOrEqual(2, $foamCount);
+        // Water is now a single GPU-animated plane, not individual WaveStrip entities
+        $this->assertArrayHasKey('WaterSurface', $map);
+        $this->assertArrayHasKey('WaterDeep', $map);
+        $waterMesh = $world->getComponent($map['WaterSurface'], MeshRenderer::class);
+        $this->assertSame('water_plane', $waterMesh->meshId);
     }
 
     public function testSceneHasClouds(): void
