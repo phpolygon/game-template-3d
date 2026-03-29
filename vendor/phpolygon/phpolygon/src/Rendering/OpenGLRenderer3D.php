@@ -90,6 +90,8 @@ class OpenGLRenderer3D implements Renderer3DInterface
     private int $dummyCloudTex = 0;
     private ?ShadowMapRenderer $shadowMap = null;
     private ?CloudShadowRenderer $cloudShadow = null;
+    private ?PostProcessPipeline $postProcess = null;
+    private bool $postProcessEnabled = true;
 
     public function __construct(int $width = 1280, int $height = 720)
     {
@@ -98,6 +100,20 @@ class OpenGLRenderer3D implements Renderer3DInterface
         $this->initShaders();
         $this->initSkybox();
         $this->useInstancingLoc = glGetUniformLocation($this->shaderProgram, 'u_use_instancing');
+
+        // Initialize post-processing pipeline
+        $this->postProcess = new PostProcessPipeline($width, $height);
+        $this->postProcess->initialize();
+    }
+
+    public function setPostProcessEnabled(bool $enabled): void
+    {
+        $this->postProcessEnabled = $enabled;
+    }
+
+    public function getPostProcess(): ?PostProcessPipeline
+    {
+        return $this->postProcess;
     }
 
     public function beginFrame(): void
@@ -130,7 +146,12 @@ class OpenGLRenderer3D implements Renderer3DInterface
 
     public function render(RenderCommandList $commandList): void
     {
-        // Ensure 3D GL state — beginFrame() is not reliably called by the engine
+        // Post-processing: redirect scene to HDR offscreen FBO
+        if ($this->postProcessEnabled && $this->postProcess !== null && $this->postProcess->isInitialized()) {
+            $this->postProcess->beginSceneCapture();
+        }
+
+        // Ensure 3D GL state
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
         glEnable(GL_MULTISAMPLE);
@@ -349,6 +370,21 @@ class OpenGLRenderer3D implements Renderer3DInterface
             $this->pendingSkyboxId = null;
         }
 
+        // Post-processing: apply SSAO, Bloom, God Rays, Tone Mapping and present
+        if ($this->postProcessEnabled && $this->postProcess !== null && $this->postProcess->isInitialized()) {
+            // Pass sun data for god rays
+            if ($this->dirLightCount > 0) {
+                $dl = $this->dirLights[0];
+                $this->postProcess->setSunData(
+                    new \PHPolygon\Math\Vec3($dl['dir'][0], $dl['dir'][1], $dl['dir'][2]),
+                    $dl['intensity'],
+                );
+            }
+            $this->postProcess->applyAndPresent();
+
+            // Restore main shader program for any subsequent 2D overlay rendering
+            glUseProgram($this->shaderProgram);
+        }
     }
 
     /**

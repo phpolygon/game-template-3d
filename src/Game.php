@@ -111,31 +111,8 @@ class Game
 
             self::renderLoadingFrame($engine, $w, $h, 'Building physics colliders...');
 
-            // Pre-build MeshCollider3D BVH trees now (instead of lazy on first tick)
-            // This is the expensive step that would otherwise freeze the first frame.
-            foreach ($engine->world->query(
-                \PHPolygon\Component\MeshCollider3D::class,
-                \PHPolygon\Component\Transform3D::class,
-            ) as $entity) {
-                $mc = $entity->get(\PHPolygon\Component\MeshCollider3D::class);
-                $transform = $entity->get(\PHPolygon\Component\Transform3D::class);
-                $meshData = \PHPolygon\Geometry\MeshRegistry::get($mc->meshId);
-                if ($meshData !== null && $mc->bvh === null) {
-                    $worldMatrix = $transform->getWorldMatrix();
-                    $triangles = [];
-                    $verts = $meshData->vertices;
-                    $idxs = $meshData->indices;
-                    for ($i = 0, $count = count($idxs); $i < $count; $i += 3) {
-                        $triangles[] = new \PHPolygon\Physics\Triangle(
-                            $worldMatrix->transformPoint(new \PHPolygon\Math\Vec3($verts[$idxs[$i] * 3], $verts[$idxs[$i] * 3 + 1], $verts[$idxs[$i] * 3 + 2])),
-                            $worldMatrix->transformPoint(new \PHPolygon\Math\Vec3($verts[$idxs[$i+1] * 3], $verts[$idxs[$i+1] * 3 + 1], $verts[$idxs[$i+1] * 3 + 2])),
-                            $worldMatrix->transformPoint(new \PHPolygon\Math\Vec3($verts[$idxs[$i+2] * 3], $verts[$idxs[$i+2] * 3 + 1], $verts[$idxs[$i+2] * 3 + 2])),
-                        );
-                    }
-                    $mc->bvh = \PHPolygon\Physics\BVH::build($triangles);
-                    $mc->lastWorldMatrixArr = $worldMatrix->toArray();
-                }
-            }
+            // HeightmapCollider3D is populated during scene build — no BVH prebuild needed.
+            // MeshCollider3D BVH (for rocks etc.) builds lazily on first physics tick.
 
             self::renderLoadingFrame($engine, $w, $h, 'Ready');
 

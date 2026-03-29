@@ -352,14 +352,21 @@ class PlaygroundScene extends Scene
 
     private function buildTerrainColliders(SceneBuilder $builder): void
     {
-        // Use the terrain mesh directly as a triangle-mesh collider (BVH accelerated).
-        // This perfectly matches the visual geometry — player walks ON the dunes.
+        // HeightmapCollider3D: O(1) terrain height query (AAA standard).
+        // Much faster than MeshCollider3D (no BVH triangle test needed).
+        $hm = new \PHPolygon\Component\HeightmapCollider3D(
+            gridWidth: 128,
+            gridDepth: 128,
+            worldMinX: -55.0,
+            worldMaxX: 55.0,
+            worldMinZ: -10.0,
+            worldMaxZ: 45.0,
+        );
+        $hm->populateFromFunction(fn(float $x, float $z) => $this->beachHeightFn($x, $z)['y']);
+
         $builder->entity('TerrainCollider')
             ->with(new Transform3D())
-            ->with(new \PHPolygon\Component\MeshCollider3D(
-                meshId: 'beach_terrain',
-                isStatic: true,
-            ));
+            ->with($hm);
 
         // Ocean floor — player can swim above this
         $builder->entity('OceanFloor')
