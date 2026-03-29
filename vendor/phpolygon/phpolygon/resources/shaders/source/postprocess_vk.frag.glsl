@@ -1,25 +1,27 @@
-#version 410 core
+#version 450
 
-in vec2 v_uv;
+layout(location = 0) in vec2 v_uv;
 
-uniform sampler2D u_scene_color;   // HDR scene color
-uniform sampler2D u_scene_depth;   // Scene depth buffer
-uniform vec3 u_camera_pos;
-uniform vec3 u_sun_direction;
-uniform float u_sun_intensity;
-uniform float u_time;
-uniform int u_width;
-uniform int u_height;
+// Vulkan descriptor bindings
+layout(binding = 0) uniform sampler2D u_scene_color;
+layout(binding = 1) uniform sampler2D u_scene_depth;
 
-// Post-processing toggles
-uniform int u_enable_ssao;
-uniform int u_enable_bloom;
-uniform int u_enable_godrays;
-uniform int u_enable_dof;
-uniform float u_dof_focus_distance;
-uniform float u_dof_range;
+layout(binding = 2) uniform PostProcessUBO {
+    vec3  u_camera_pos;
+    float u_time;
+    vec3  u_sun_direction;
+    float u_sun_intensity;
+    int   u_width;
+    int   u_height;
+    int   u_enable_ssao;
+    int   u_enable_bloom;
+    int   u_enable_godrays;
+    int   u_enable_dof;
+    float u_dof_focus_distance;
+    float u_dof_range;
+};
 
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color;
 
 // ================================================================
 //  Noise (for SSAO)
