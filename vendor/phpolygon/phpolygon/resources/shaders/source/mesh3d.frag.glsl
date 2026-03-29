@@ -1,99 +1,78 @@
-#version 450
+#version 410 core
 
-layout(location = 0) in vec3 v_normal;
-layout(location = 1) in vec3 v_worldPos;
-layout(location = 2) in vec2 v_uv;
+in vec3 v_normal;
+in vec3 v_worldPos;
+in vec2 v_uv;
 
-// ================================================================
-//  Vulkan Descriptor Bindings
-// ================================================================
+uniform vec3 u_ambient_color;
+uniform float u_ambient_intensity;
 
 struct DirLight {
-    vec3 direction; float _pad0;
-    vec3 color;     float intensity;
+    vec3 direction;
+    vec3 color;
+    float intensity;
 };
+uniform DirLight u_dir_lights[16];
+uniform int u_dir_light_count;
 
-struct PointLight {
-    vec3  position;  float intensity;
-    vec3  color;     float radius;
-};
-
-// Binding 0: Frame UBO (set by vertex shader too)
-// Binding 1: Lighting + Material + Weather UBO
-layout(binding = 1) uniform LightingUBO {
-    // Ambient
-    vec3  u_ambient_color;
-    float u_ambient_intensity;
-
-    // Material
-    vec3  u_albedo;
-    float u_roughness;
-    vec3  u_emission;
-    float u_metallic;
-    float u_alpha;
-    float u_time;
-    int   u_proc_mode;
-    float u_moon_phase;
-
-    // Fog
-    vec3  u_fog_color;
-    float u_fog_near;
-    vec3  u_camera_pos;
-    float u_fog_far;
-
-    // Sky / Environment
-    vec3  u_sky_color;
-    int   u_has_environment_map;
-    vec3  u_horizon_color;
-    int   u_has_shadow_map;
-    vec3  u_season_tint;
-    int   u_has_cloud_shadow;
-
-    // Weather
-    float u_rain_intensity;
-    float u_snow_coverage;
-    float u_temperature;
-    float u_dew_wetness;
-    float u_storm_intensity;
-    float _pad_w0;
-    float _pad_w1;
-    float _pad_w2;
-
-    // Shadow
-    mat4  u_light_space_matrix;
-
-    // Directional lights
-    int   u_dir_light_count;
-    int   _pad_dl0;
-    int   _pad_dl1;
-    int   _pad_dl2;
-    DirLight u_dir_lights[16];
-
-    // Point lights
-    int   u_point_light_count;
-    int   _pad_pl0;
-    int   _pad_pl1;
-    int   _pad_pl2;
-    PointLight u_point_lights[8];
-};
-
-// Legacy aliases
+// Legacy single-light aliases (used by shadow map and some proc modes)
 #define u_dir_light_direction u_dir_lights[0].direction
 #define u_dir_light_color u_dir_lights[0].color
 #define u_dir_light_intensity u_dir_lights[0].intensity
 
-// Binding 2: Shadow map (depth comparison sampler)
-layout(binding = 2) uniform sampler2DShadow u_shadow_map;
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float intensity;
+    float radius;
+};
+uniform PointLight u_point_lights[8];
+uniform int u_point_light_count;
 
-// Binding 3: Cloud shadow map (R8 opacity)
-layout(binding = 3) uniform sampler2D u_cloud_shadow_map;
+uniform vec3 u_albedo;
+uniform vec3 u_emission;
+uniform float u_roughness;
+uniform float u_metallic;
+uniform float u_alpha;
+uniform vec3 u_fog_color;
+uniform float u_fog_near;
+uniform float u_fog_far;
 
-// Binding 4: Environment cubemap
-layout(binding = 4) uniform samplerCube u_environment_map;
+uniform vec3 u_camera_pos;
+uniform float u_time;
+// Procedural material modes: 0=standard, 1=sand terrain, 2=water, 3=rock, 4=palm trunk, 5=palm leaf
+uniform int u_proc_mode;
 
-layout(location = 0) out vec4 frag_color;
+// Environment reflection
+uniform samplerCube u_environment_map;
+uniform int u_has_environment_map;
+uniform vec3 u_sky_color;
+uniform vec3 u_horizon_color;
 
-// ================================================================
+// Shadow mapping
+uniform sampler2DShadow u_shadow_map;
+uniform mat4 u_light_space_matrix;
+uniform int u_has_shadow_map;
+
+// Cloud shadow map (opacity-based, separate from depth shadow)
+uniform sampler2D u_cloud_shadow_map;
+uniform int u_has_cloud_shadow;
+
+// Moon phase for procedural moon shader
+uniform float u_moon_phase;
+
+// Seasonal tint applied to terrain and vegetation
+uniform vec3 u_season_tint; // multiplied with base colors (1,1,1 = no change)
+
+// Weather surface effects
+uniform float u_rain_intensity;
+uniform float u_snow_coverage;
+uniform float u_temperature;
+uniform float u_dew_wetness;
+uniform float u_storm_intensity;
+
+out vec4 frag_color;
+
 // ================================================================
 //  Noise functions
 // ================================================================

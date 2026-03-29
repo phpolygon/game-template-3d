@@ -151,7 +151,29 @@ class Engine
 
         // Create GPU-backed renderers after window is initialized (need graphics context)
         if (!$this->headless && $this->config->is3D) {
-            $this->renderer3D = match ($this->config->renderBackend3D) {
+            $backend = $this->config->renderBackend3D;
+
+            // Auto-detect: prefer Vulkan (MoltenVK on macOS) → OpenGL fallback
+            if ($backend === 'auto') {
+                $backend = 'opengl'; // safe default
+                if (class_exists(\Vk\Instance::class)) {
+                    // Check if Vulkan/MoltenVK is available
+                    $hasVulkanLib = false;
+                    if (PHP_OS_FAMILY === 'Darwin') {
+                        foreach (['/opt/homebrew/lib', '/usr/local/lib'] as $dir) {
+                            if (file_exists("{$dir}/libvulkan.dylib")) { $hasVulkanLib = true; break; }
+                        }
+                    } else {
+                        $hasVulkanLib = true; // Linux/Windows: assume Vulkan available if extension loaded
+                    }
+                    if ($hasVulkanLib) {
+                        $backend = 'vulkan';
+                    }
+                }
+                fprintf(STDERR, "[Engine] Auto-detected render backend: %s\n", $backend);
+            }
+
+            $this->renderer3D = match ($backend) {
                 'vulkan' => new VulkanRenderer3D(
                     $renderWidth,
                     $renderHeight,
