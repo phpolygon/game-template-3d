@@ -7,18 +7,16 @@ namespace App\Geometry;
 use PHPolygon\Geometry\MeshData;
 
 /**
- * Generates a feather-shaped palm frond mesh.
- * Central spine with thin leaflets branching off alternately.
- * Droops and narrows toward the tip like a real coconut palm frond.
+ * Generates a realistic coconut palm frond mesh.
+ *
+ * Structure: central rachis (spine) with dense leaflet pairs branching off.
+ * Shape: elegant parabolic arc — rises slightly from crown, then curves
+ * gracefully outward and downward under its own weight.
+ * Leaflets: long, narrow, dense — like teeth of a comb, hanging slightly down.
  */
 class PalmFrondMesh
 {
-    /**
-     * @param float $length   Total frond length
-     * @param int $leafletPairs Number of leaflet pairs along the spine
-     * @param int $seed       For variation between fronds
-     */
-    public static function generate(float $length = 2.5, int $leafletPairs = 12, int $seed = 0): MeshData
+    public static function generate(float $length = 3.2, int $leafletPairs = 26, int $seed = 0): MeshData
     {
         $vertices = [];
         $normals = [];
@@ -26,141 +24,143 @@ class PalmFrondMesh
         $indices = [];
         $vertIdx = 0;
 
-        // Spine segments — the central rachis
-        $spineSegments = $leafletPairs + 1;
-        $spineWidth = 0.015;
+        // =====================================================================
+        // RACHIS (central spine) — parabolic arc
+        // =====================================================================
+        $spineSegments = $leafletPairs + 2;
+        $spineWidth = 0.02;
 
-        // Generate spine vertices (flat strip along Z axis)
+        // Pre-compute spine points for reuse by leaflets
+        $spinePoints = [];
         for ($i = 0; $i <= $spineSegments; $i++) {
             $t = (float) $i / $spineSegments;
+
+            // Parabolic arc: rises briefly at base, then arcs outward and down
+            // Z = forward direction (frond extends in -Z)
             $z = -$t * $length;
 
-            // Droop curve — frond hangs down more toward tip
-            $droop = $t * $t * $length * 0.6;
-            $y = -$droop;
+            // Y = gentle arc: slight rise then soft droop (elevation handles the rest)
+            $rise = (1.0 - $t) * $t * 0.25 * $length; // mild upward (peaks at t=0.5)
+            $droop = $t * $t * $length * 0.3;          // gentle gravity
+            $y = $rise - $droop;
 
-            // Slight S-curve
-            $sway = sin($t * M_PI * 1.5 + $seed * 0.7) * 0.08 * $t;
+            // Subtle S-curve for organic feel
+            $sway = sin($t * M_PI * 1.3 + $seed * 0.7) * 0.04 * $t;
             $x = $sway;
 
-            // Spine narrows toward tip
-            $w = $spineWidth * (1.0 - $t * 0.6);
+            $spinePoints[] = ['x' => $x, 'y' => $y, 'z' => $z, 't' => $t];
 
-            // Left vertex
-            $vertices[] = (float) ($x - $w);
-            $vertices[] = (float) $y;
-            $vertices[] = (float) $z;
-            $normals[] = 0.0; $normals[] = 1.0; $normals[] = 0.0;
-            $uvs[] = 0.5 - $w; $uvs[] = (float) $t;
+            // Rachis narrows toward tip
+            $w = $spineWidth * (1.0 - $t * 0.75);
 
-            // Right vertex
-            $vertices[] = (float) ($x + $w);
-            $vertices[] = (float) $y;
-            $vertices[] = (float) $z;
+            $vertices[] = (float) ($x - $w); $vertices[] = (float) $y; $vertices[] = (float) $z;
             $normals[] = 0.0; $normals[] = 1.0; $normals[] = 0.0;
-            $uvs[] = 0.5 + $w; $uvs[] = (float) $t;
+            $uvs[] = 0.5 - $w; $uvs[] = $t;
+
+            $vertices[] = (float) ($x + $w); $vertices[] = (float) $y; $vertices[] = (float) $z;
+            $normals[] = 0.0; $normals[] = 1.0; $normals[] = 0.0;
+            $uvs[] = 0.5 + $w; $uvs[] = $t;
         }
 
-        // Spine indices
         for ($i = 0; $i < $spineSegments; $i++) {
             $base = $i * 2;
-            $indices[] = $base;
-            $indices[] = $base + 1;
-            $indices[] = $base + 3;
-            $indices[] = $base;
-            $indices[] = $base + 3;
-            $indices[] = $base + 2;
+            $indices[] = $base;     $indices[] = $base + 1; $indices[] = $base + 3;
+            $indices[] = $base;     $indices[] = $base + 3; $indices[] = $base + 2;
         }
 
         $vertIdx = ($spineSegments + 1) * 2;
 
-        // Generate leaflets — thin triangles branching off the spine
+        // =====================================================================
+        // LEAFLETS — dense, long, narrow strips like a comb
+        // =====================================================================
         for ($pair = 0; $pair < $leafletPairs; $pair++) {
             $t = ((float) $pair + 0.5) / $leafletPairs;
 
-            // Position along spine
-            $spineZ = -$t * $length;
-            $spineDroop = $t * $t * $length * 0.4;
-            $spineY = -$spineDroop;
-            $spineSway = sin($t * M_PI * 1.5 + $seed * 0.7) * 0.08 * $t;
-            $spineX = $spineSway;
+            // Skip first 5% — no leaflets at the base (bare petiole)
+            if ($t < 0.05) continue;
 
-            // Leaflet properties — longer in the middle, shorter at base and tip
-            $leafletLength = 0.55 * sin($t * M_PI) * (1.0 - $t * 0.3);
-            $leafletWidth = 0.12 * (1.0 - $t * 0.4);
+            $spIdx = min(count($spinePoints) - 1, (int) (($pair + 0.5) / $leafletPairs * $spineSegments));
+            $sp = $spinePoints[$spIdx];
+            $spineX = $sp['x'];
+            $spineY = $sp['y'];
+            $spineZ = $sp['z'];
 
-            // Droop on leaflets — hang down naturally
-            $leafDroop = -0.1 - $t * 0.25;
+            // Leaflet length: longest at 25-50%, tapering at base and tip
+            $envelope = sin(max(0.0, ($t - 0.05) / 0.95) * M_PI);
+            $leafletLen = 0.9 * $envelope * (1.0 - $t * 0.12);
 
-            // Pseudo-random angle variation
-            $angleVar = sin($pair * 3.7 + $seed * 2.1) * 0.15;
+            // Leaflet width — wide enough to overlap with neighbors for dense canopy
+            $leafletW = 0.06 * (1.0 - $t * 0.25);
 
-            // Both sides — left and right leaflets
+            // Leaflets angle: nearly perpendicular to spine, slight forward sweep
+            $sweepAngle = 0.15 * $t; // more forward sweep near tip
+
+            // Leaflets droop: gentle hang, more toward tip
+            $leafletDroop = -0.08 - $t * 0.2;
+
+            // Slight random variation
+            $angleVar = sin($pair * 3.7 + $seed * 2.1) * 0.08;
+            $lenVar = sin($pair * 5.3 + $seed * 1.7) * 0.06;
+            $leafletLen *= (1.0 + $lenVar);
+
             for ($side = -1; $side <= 1; $side += 2) {
-                $angle = ($side * 0.7 + $angleVar); // ~40° off spine
+                $sideAngle = $side * (M_PI * 0.38 + $angleVar) + $sweepAngle;
 
-                // Leaflet: triangle (base at spine, tip extends outward)
-                // Base left
+                // Leaflet base (at spine, slight width along spine axis)
                 $bx = $spineX;
                 $by = $spineY;
-                $bz = $spineZ - $leafletWidth * 0.5;
+                $bz1 = $spineZ - $leafletW * 0.5;
+                $bz2 = $spineZ + $leafletW * 0.5;
 
-                // Base right
-                $b2z = $spineZ + $leafletWidth * 0.5;
+                // Leaflet tip (extends outward + droops)
+                $tipX = $spineX + $side * $leafletLen * cos($sideAngle);
+                $tipY = $spineY + $leafletDroop * $leafletLen;
+                $tipZ = $spineZ - $leafletLen * sin(abs($sideAngle)) * 0.2;
 
-                // Tip
-                $tipX = $spineX + $side * $leafletLength * cos($angle);
-                $tipY = $spineY + $leafDroop * $leafletLength;
-                $tipZ = $spineZ - $leafletLength * sin(abs($angle)) * 0.3;
+                // Mid-point for a slightly wider leaflet shape
+                $midF = 0.5;
+                $midX = $spineX + $side * $leafletLen * $midF * cos($sideAngle);
+                $midY = $spineY + $leafletDroop * $leafletLen * $midF * 0.6;
+                $midZ = $spineZ + $leafletW * 0.3 * $side;
 
-                // Normal — roughly upward, slightly tilted outward
+                // Normal — tilted outward
                 $nx = (float) ($side * 0.2);
                 $ny = 0.95;
-                $nz = 0.0;
                 $nLen = sqrt($nx * $nx + $ny * $ny);
-                $nx /= $nLen;
-                $ny /= $nLen;
+                $nx /= $nLen; $ny /= $nLen;
 
-                // Triangle: 3 vertices
-                $vertices[] = (float) $bx;
-                $vertices[] = (float) $by;
-                $vertices[] = (float) $bz;
-                $normals[] = (float) $nx; $normals[] = (float) $ny; $normals[] = 0.0;
-                $uvs[] = 0.5; $uvs[] = (float) $t;
+                // Quad: 2 triangles for each leaflet
+                // Triangle 1: base → base2 → mid
+                $vertices[] = (float) $bx; $vertices[] = (float) $by; $vertices[] = (float) $bz1;
+                $normals[] = $nx; $normals[] = $ny; $normals[] = 0.0;
+                $uvs[] = 0.5; $uvs[] = $t;
 
-                $vertices[] = (float) $bx;
-                $vertices[] = (float) $by;
-                $vertices[] = (float) $b2z;
-                $normals[] = (float) $nx; $normals[] = (float) $ny; $normals[] = 0.0;
-                $uvs[] = 0.5; $uvs[] = (float) $t;
+                $vertices[] = (float) $bx; $vertices[] = (float) $by; $vertices[] = (float) $bz2;
+                $normals[] = $nx; $normals[] = $ny; $normals[] = 0.0;
+                $uvs[] = 0.5; $uvs[] = $t;
 
-                $vertices[] = (float) $tipX;
-                $vertices[] = (float) $tipY;
-                $vertices[] = (float) $tipZ;
-                $normals[] = (float) $nx; $normals[] = (float) $ny; $normals[] = 0.0;
-                $uvs[] = (float) (0.5 + $side * 0.5); $uvs[] = (float) $t;
+                $vertices[] = (float) $midX; $vertices[] = (float) $midY; $vertices[] = (float) $midZ;
+                $normals[] = $nx; $normals[] = $ny; $normals[] = 0.0;
+                $uvs[] = (float) (0.5 + $side * 0.3); $uvs[] = $t + 0.01;
 
-                // Two triangles for a wider leaflet (quad-like)
-                $indices[] = $vertIdx;
-                $indices[] = $vertIdx + 1;
-                $indices[] = $vertIdx + 2;
+                $indices[] = $vertIdx; $indices[] = $vertIdx + 1; $indices[] = $vertIdx + 2;
 
-                // Second triangle — wider base
-                $mid2X = $spineX + $side * $leafletLength * 0.6 * cos($angle);
-                $mid2Y = $spineY + $leafDroop * $leafletLength * 0.6;
-                $mid2Z = $spineZ;
+                // Triangle 2: mid → base2 → tip  (forms the outer half)
+                $vertices[] = (float) $midX; $vertices[] = (float) $midY; $vertices[] = (float) $midZ;
+                $normals[] = $nx; $normals[] = $ny; $normals[] = 0.0;
+                $uvs[] = (float) (0.5 + $side * 0.3); $uvs[] = $t + 0.01;
 
-                $vertices[] = (float) $mid2X;
-                $vertices[] = (float) $mid2Y;
-                $vertices[] = (float) $mid2Z;
-                $normals[] = (float) $nx; $normals[] = (float) $ny; $normals[] = 0.0;
-                $uvs[] = (float) (0.5 + $side * 0.3); $uvs[] = (float) ($t + 0.02);
+                $vertices[] = (float) $bx; $vertices[] = (float) $by; $vertices[] = (float) $bz2;
+                $normals[] = $nx; $normals[] = $ny; $normals[] = 0.0;
+                $uvs[] = 0.5; $uvs[] = $t;
 
-                $indices[] = $vertIdx + 1;
-                $indices[] = $vertIdx + 2;
-                $indices[] = $vertIdx + 3;
+                $vertices[] = (float) $tipX; $vertices[] = (float) $tipY; $vertices[] = (float) $tipZ;
+                $normals[] = $nx; $normals[] = $ny; $normals[] = 0.0;
+                $uvs[] = (float) (0.5 + $side * 0.5); $uvs[] = $t;
 
-                $vertIdx += 4;
+                $indices[] = $vertIdx + 3; $indices[] = $vertIdx + 4; $indices[] = $vertIdx + 5;
+
+                $vertIdx += 6;
             }
         }
 

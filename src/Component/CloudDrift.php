@@ -30,4 +30,10 @@ class CloudDrift extends AbstractComponent
     public float $phaseOffset = 0.0;
 
     public float $baseY = 0.0;
+
+    /** Index for visibility ordering (lower indices shown first) */
+    public int $cloudIndex = 0;
+
+    /** Target alpha for smooth show/hide transitions */
+    public float $targetAlpha = 1.0;
 }

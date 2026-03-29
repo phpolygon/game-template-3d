@@ -8,6 +8,7 @@ use App\Component\FirstPersonCamera;
 use PHPolygon\Component\CharacterController3D;
 use PHPolygon\Component\HingeJoint;
 use PHPolygon\Component\Transform3D;
+use PHPolygon\Component\Weather;
 use PHPolygon\ECS\AbstractSystem;
 use PHPolygon\ECS\World;
 use PHPolygon\Math\Quaternion;
@@ -183,6 +184,97 @@ class FirstPersonCameraSystem extends AbstractSystem
             if ($moveLen > 0.001) {
                 $this->pushNearbyDoors($world, $transform->position, $forward, $dt);
             }
+
+            // Weather test shortcuts (1-6 keys)
+            $this->handleWeatherShortcuts($world);
+        }
+    }
+
+    private function handleWeatherShortcuts(World $world): void
+    {
+        $atmo = null;
+        foreach ($world->query(\App\Component\Atmosphere::class) as $e) {
+            $atmo = $e->get(\App\Component\Atmosphere::class);
+            break;
+        }
+
+        foreach ($world->query(Weather::class) as $entity) {
+            $weather = $entity->get(Weather::class);
+            $forced = false;
+
+            // 1 = Clear sky
+            if ($this->input->isKeyPressed(GLFW_KEY_1)) {
+                $weather->cloudCoverage = 0.1;
+                $weather->humidity = 0.3;
+                $weather->rainIntensity = 0.0;
+                $weather->snowIntensity = 0.0;
+                $weather->stormIntensity = 0.0;
+                $weather->fogDensity = 0.0;
+                $forced = true;
+                fprintf(STDERR, "[Weather] Forced: CLEAR\n");
+            }
+            // 2 = Cloudy
+            if ($this->input->isKeyPressed(GLFW_KEY_2)) {
+                $weather->cloudCoverage = 0.7;
+                $weather->humidity = 0.6;
+                $weather->rainIntensity = 0.0;
+                $weather->stormIntensity = 0.0;
+                $weather->fogDensity = 0.0;
+                $forced = true;
+                fprintf(STDERR, "[Weather] Forced: CLOUDY\n");
+            }
+            // 3 = Rain
+            if ($this->input->isKeyPressed(GLFW_KEY_3)) {
+                $weather->cloudCoverage = 0.85;
+                $weather->humidity = 0.8;
+                $weather->rainIntensity = 0.7;
+                $weather->temperature = 15.0;
+                $weather->stormIntensity = 0.0;
+                $weather->fogDensity = 0.0;
+                $forced = true;
+                fprintf(STDERR, "[Weather] Forced: RAIN\n");
+            }
+            // 4 = Storm
+            if ($this->input->isKeyPressed(GLFW_KEY_4)) {
+                $weather->cloudCoverage = 0.95;
+                $weather->humidity = 0.9;
+                $weather->rainIntensity = 0.9;
+                $weather->stormIntensity = 0.8;
+                $weather->temperature = 25.0;
+                $weather->fogDensity = 0.0;
+                $forced = true;
+                fprintf(STDERR, "[Weather] Forced: STORM\n");
+            }
+            // 5 = Snow
+            if ($this->input->isKeyPressed(GLFW_KEY_5)) {
+                $weather->cloudCoverage = 0.8;
+                $weather->humidity = 0.75;
+                $weather->snowIntensity = 0.6;
+                $weather->rainIntensity = 0.0;
+                $weather->temperature = -2.0;
+                $weather->stormIntensity = 0.0;
+                $weather->fogDensity = 0.0;
+                $forced = true;
+                fprintf(STDERR, "[Weather] Forced: SNOW\n");
+            }
+            // 6 = Fog
+            if ($this->input->isKeyPressed(GLFW_KEY_6)) {
+                $weather->cloudCoverage = 0.4;
+                $weather->humidity = 0.9;
+                $weather->fogDensity = 0.8;
+                $weather->rainIntensity = 0.0;
+                $weather->stormIntensity = 0.0;
+                $weather->snowIntensity = 0.0;
+                $forced = true;
+                fprintf(STDERR, "[Weather] Forced: FOG\n");
+            }
+
+            // Pause atmosphere simulation for 10 seconds so forced values stick
+            if ($forced && $atmo !== null) {
+                $atmo->forcedTimer = 10.0;
+            }
+
+            break;
         }
     }
 

@@ -32,6 +32,9 @@ class Wind extends AbstractComponent
 
     public Vec3 $direction;
 
+    /** Current wind angle in radians (set by WindSystem from Atmosphere) */
+    public float $windAngle = 0.0;
+
     public function __construct()
     {
         $this->direction = new Vec3(1.0, 0.0, -0.3);
