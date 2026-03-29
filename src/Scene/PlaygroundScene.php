@@ -6,6 +6,7 @@ namespace App\Scene;
 
 use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
+use App\Geometry\RainbowArcMesh;
 use App\Prefab\PalmBuilder;
 use App\Component\PlayerBody;
 use App\Geometry\PlankWallMesh;
@@ -127,6 +128,7 @@ class PlaygroundScene extends Scene
         $this->buildBeachDetails($builder);
         $this->buildBeachHut($builder);
         $this->buildClouds($builder);
+        $this->buildRainbow($builder);
     }
 
     private function buildPlayer(SceneBuilder $builder): void
@@ -598,6 +600,27 @@ class PlaygroundScene extends Scene
     //  Very flat (width:height = 8:1), large (30-60m span), soft overlapping
     //  puffs (15-25 spheres each), bright white tops, slight gray undersides
     // =========================================================================
+
+    private function buildRainbow(SceneBuilder $builder): void
+    {
+        if (!MeshRegistry::has('rainbow_arc')) {
+            MeshRegistry::register('rainbow_arc', RainbowArcMesh::generate(80.0, 2.5, 48, 8));
+        }
+
+        MaterialRegistry::register('rainbow', new Material(
+            albedo: Color::hex('#FFFFFF'),
+            emission: Color::hex('#000000'),
+            alpha: 0.0, // hidden initially
+        ));
+
+        // Rainbow entity — positioned far away, hidden below horizon until triggered
+        $builder->entity('Rainbow')
+            ->with(new Transform3D(
+                position: new Vec3(0.0, -200.0, -60.0),
+                scale: new Vec3(1.0, 1.0, 1.0),
+            ))
+            ->with(new MeshRenderer(meshId: 'rainbow_arc', materialId: 'rainbow'));
+    }
 
     private function buildClouds(SceneBuilder $builder): void
     {

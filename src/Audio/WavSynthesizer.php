@@ -280,6 +280,202 @@ class WavSynthesizer
         return self::wrapWav($data, 1);
     }
 
+    /**
+     * Rain — pink noise with sparse droplet impulses and intensity modulation.
+     */
+    public static function generateRain(float $duration = 10.0): string
+    {
+        $sr = self::SAMPLE_RATE;
+        $samples = (int) ($sr * $duration);
+        $data = '';
+
+        $brown = 0.0;
+        $lp1 = 0.0;
+        $lp2 = 0.0;
+        $dropLp = 0.0;
+        $rng = 0x3456ABCD;
+
+        for ($i = 0; $i < $samples; $i++) {
+            $t = $i / $sr;
+
+            // Intensity modulation — slow wax/wane for natural feel
+            $intensity = 0.6
+                + 0.2 * sin(2.0 * M_PI * 0.08 * $t)
+                + 0.12 * sin(2.0 * M_PI * 0.13 * $t + 1.7)
+                + 0.08 * sin(2.0 * M_PI * 0.05 * $t + 3.2);
+
+            // Pink noise base: brown with less integration (brighter than ocean)
+            $rng ^= ($rng << 13) & 0xFFFFFFFF;
+            $rng ^= ($rng >> 17) & 0xFFFFFFFF;
+            $rng ^= ($rng << 5) & 0xFFFFFFFF;
+            $white = (($rng & 0xFFFFFFFF) / 2147483648.0) - 1.0;
+
+            $brown = $brown * 0.993 + $white * 0.07;
+            $brown = max(-1.0, min(1.0, $brown));
+
+            // Band-pass 2000-6000 Hz for "shhh" of many droplets
+            $a1 = self::lpCoeff(5000.0);
+            $lp1 += $a1 * ($brown - $lp1);
+            $a2 = self::lpCoeff(1500.0);
+            $lp2 += $a2 * ($brown - $lp2);
+            $bandpass = $lp1 - $lp2;
+
+            // Sparse droplet impulses — individual drop impacts
+            $rng ^= ($rng << 13) & 0xFFFFFFFF;
+            $rng ^= ($rng >> 17) & 0xFFFFFFFF;
+            $rng ^= ($rng << 5) & 0xFFFFFFFF;
+            $dropRand = ($rng & 0xFFFF) / 65535.0;
+            $drop = 0.0;
+            if ($dropRand < 0.003) {
+                $drop = $white * 0.8; // sharp impulse
+            }
+            // Resonant filter for drop "plop"
+            $aD = self::lpCoeff(6000.0);
+            $dropLp += $aD * ($drop - $dropLp);
+            $dropFiltered = $drop - $dropLp * 0.5;
+
+            $sample = $bandpass * $intensity * 0.5
+                    + $dropFiltered * 0.25;
+
+            $data .= self::packSample($sample * 0.6);
+        }
+
+        return self::wrapWav($data, 1);
+    }
+
+    /**
+     * Thunder — initial crack, deep rumble with rolling echoes and sub-bass.
+     */
+    public static function generateThunder(float $duration = 4.0): string
+    {
+        $sr = self::SAMPLE_RATE;
+        $samples = (int) ($sr * $duration);
+        $data = '';
+
+        $brown = 0.0;
+        $lp1 = 0.0;
+        $lp2 = 0.0;
+        $lp3 = 0.0;
+        $rng = 0xDEADBEEF;
+
+        for ($i = 0; $i < $samples; $i++) {
+            $t = $i / $sr;
+
+            // Noise source
+            $rng ^= ($rng << 13) & 0xFFFFFFFF;
+            $rng ^= ($rng >> 17) & 0xFFFFFFFF;
+            $rng ^= ($rng << 5) & 0xFFFFFFFF;
+            $white = (($rng & 0xFFFFFFFF) / 2147483648.0) - 1.0;
+
+            $brown = $brown * 0.998 + $white * 0.04;
+            $brown = max(-1.0, min(1.0, $brown));
+
+            // Initial crack: sharp white noise burst (first 25ms)
+            $crack = 0.0;
+            if ($t < 0.025) {
+                $crackEnv = (1.0 - $t / 0.025);
+                $a1 = self::lpCoeff(3000.0);
+                $lp1 += $a1 * ($white - $lp1);
+                $crack = ($white * 0.6 + $lp1 * 0.4) * $crackEnv * $crackEnv;
+            }
+
+            // Deep rumble body: brown noise low-passed at 80-200 Hz, long decay
+            $rumbleCutoff = 80.0 + 120.0 * exp(-$t * 0.5);
+            $a2 = self::lpCoeff($rumbleCutoff);
+            $lp2 += $a2 * ($brown - $lp2);
+            $rumbleEnv = exp(-$t * 0.8);
+            $rumble = $lp2 * $rumbleEnv;
+
+            // Rolling echoes: delayed filtered copies simulating cloud reflections
+            $echo1 = ($t > 0.3) ? exp(-($t - 0.3) * 1.5) * 0.5 : 0.0;
+            $echo2 = ($t > 0.8) ? exp(-($t - 0.8) * 2.0) * 0.3 : 0.0;
+            $echo3 = ($t > 1.4) ? exp(-($t - 1.4) * 2.5) * 0.2 : 0.0;
+            $echoMix = ($echo1 + $echo2 + $echo3) * $brown;
+
+            $a3 = self::lpCoeff(150.0);
+            $lp3 += $a3 * ($echoMix - $lp3);
+
+            // Sub-bass: chest-thumping low frequency
+            $subBass = sin(2.0 * M_PI * 30.0 * $t) * exp(-$t * 1.2) * 0.15;
+
+            $sample = $crack * 0.8
+                    + $rumble * 0.6
+                    + $lp3 * 0.4
+                    + $subBass;
+
+            $data .= self::packSample($sample * 0.7);
+        }
+
+        return self::wrapWav($data, 1);
+    }
+
+    /**
+     * Storm wind howl — aggressive wind with prominent whistling and deep gusts.
+     */
+    public static function generateWindHowl(float $duration = 10.0): string
+    {
+        $sr = self::SAMPLE_RATE;
+        $samples = (int) ($sr * $duration);
+        $data = '';
+
+        $brown = 0.0;
+        $lp1 = 0.0;
+        $lp2 = 0.0;
+        $rng = 0xFEDCBA98;
+
+        for ($i = 0; $i < $samples; $i++) {
+            $t = $i / $sr;
+
+            // Aggressive gust envelope: deeper dips, sharper peaks
+            $gust = 0.5
+                + 0.3 * sin(2.0 * M_PI * 0.15 * $t)
+                + 0.2 * sin(2.0 * M_PI * 0.09 * $t + 1.5)
+                + 0.15 * sin(2.0 * M_PI * 0.31 * $t + 4.0)
+                + 0.1 * sin(2.0 * M_PI * 0.53 * $t + 0.3);
+            $gust = max(0.15, min(1.0, $gust));
+
+            // Brown noise base — higher cutoff for more presence
+            $rng ^= ($rng << 13) & 0xFFFFFFFF;
+            $rng ^= ($rng >> 17) & 0xFFFFFFFF;
+            $rng ^= ($rng << 5) & 0xFFFFFFFF;
+            $white = (($rng & 0xFFFFFFFF) / 2147483648.0) - 1.0;
+
+            $brown = $brown * 0.996 + $white * 0.06;
+            $brown = max(-1.0, min(1.0, $brown));
+
+            $cutoff = 300.0 + $gust * 900.0;
+            $a1 = self::lpCoeff($cutoff);
+            $lp1 += $a1 * ($brown - $lp1);
+
+            // High-frequency howl layer
+            $rng ^= ($rng << 13) & 0xFFFFFFFF;
+            $rng ^= ($rng >> 17) & 0xFFFFFFFF;
+            $rng ^= ($rng << 5) & 0xFFFFFFFF;
+            $white2 = (($rng & 0xFFFFFFFF) / 2147483648.0) - 1.0;
+            $a2 = self::lpCoeff(500.0);
+            $lp2 += $a2 * ($white2 - $lp2);
+            $howl = ($white2 - $lp2) * 0.4;
+
+            // Multiple whistle frequencies — active from lower gust threshold
+            $whistle = 0.0;
+            if ($gust > 0.3) {
+                $wStr = ($gust - 0.3) / 0.7;
+                $f1 = 900.0 + sin($t * 1.8) * 200.0 + sin($t * 4.3) * 80.0;
+                $f2 = 1400.0 + sin($t * 2.7) * 300.0 + sin($t * 7.1) * 50.0;
+                $whistle = (sin(2.0 * M_PI * $f1 * $t) * 0.03
+                          + sin(2.0 * M_PI * $f2 * $t) * 0.02) * $wStr;
+            }
+
+            $sample = $lp1 * $gust * 0.5
+                    + $howl * $gust * 0.3
+                    + $whistle;
+
+            $data .= self::packSample($sample * 0.6);
+        }
+
+        return self::wrapWav($data, 1);
+    }
+
     private static function lpCoeff(float $cutoff): float
     {
         $rc = 1.0 / (2.0 * M_PI * $cutoff);

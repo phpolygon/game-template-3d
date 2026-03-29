@@ -36,4 +36,12 @@ class CloudDrift extends AbstractComponent
 
     /** Target alpha for smooth show/hide transitions */
     public float $targetAlpha = 1.0;
+
+    /** Cloud type: 0=cumulus, 1=stratus, 2=cumulonimbus */
+    public int $cloudType = 0;
+
+    /** Original scale for type morphing */
+    public float $baseScaleX = 0.0;
+    public float $baseScaleY = 0.0;
+    public float $baseScaleZ = 0.0;
 }

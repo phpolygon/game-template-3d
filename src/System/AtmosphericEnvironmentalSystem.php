@@ -6,10 +6,16 @@ namespace App\System;
 
 use App\Component\Atmosphere;
 use PHPolygon\Component\DayNightCycle;
+use PHPolygon\Component\MeshRenderer;
 use PHPolygon\Component\Season;
+use PHPolygon\Component\Transform3D;
 use PHPolygon\Component\Weather;
 use PHPolygon\ECS\AbstractSystem;
 use PHPolygon\ECS\World;
+use PHPolygon\Math\Vec3;
+use PHPolygon\Rendering\Color;
+use PHPolygon\Rendering\Material;
+use PHPolygon\Rendering\MaterialRegistry;
 use PHPolygon\System\SeasonSystem;
 
 /**
@@ -22,6 +28,11 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
     private SeasonSystem $seasonSystem;
     private AtmosphereSystem $atmosphereSystem;
     private int $debugCounter = 0;
+
+    // Rainbow state
+    private float $prevRainIntensity = 0.0;
+    private float $rainbowTimer = 0.0;
+    private bool $rainbowActive = false;
 
     public function __construct()
     {
@@ -42,6 +53,7 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
         // 3. Cross-system coupling
         $this->coupleToWind($world);
         $this->coupleToDayNight($world);
+        $this->updateRainbow($world, $dt);
 
         if ($this->debugCounter % 120 === 1) {
             $dayNight = null;
@@ -93,8 +105,24 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
             $dayNight->axialTilt = $season->axialTilt;
         }
         if ($weather !== null) {
-            $dayNight->cloudDarkening = $weather->cloudCoverage * 0.5;
+            // Storm darkens sky dramatically (up to 85%), not just clouds
+            $cloudDark = $weather->cloudCoverage * 0.5;
+            $stormDark = $weather->stormIntensity * 0.8;
+            $dayNight->cloudDarkening = min(0.85, max($cloudDark, $stormDark));
             $dayNight->lightningFlash = $weather->lightningFlash;
+
+            // Weather surface data → pushed to shader via DayNightSystem
+            $dayNight->weatherRainIntensity = $weather->rainIntensity;
+            $dayNight->weatherSnowCoverage = $weather->snowIntensity;
+            $dayNight->weatherTemperature = $weather->temperature;
+            $dayNight->weatherStormIntensity = $weather->stormIntensity;
+
+            // Dew wetness from dew point spread (high when spread < 5°C)
+            $atmoEntity = null;
+            foreach ($world->query(Atmosphere::class) as $e) { $atmoEntity = $e->get(Atmosphere::class); break; }
+            $dayNight->weatherDewWetness = $atmoEntity !== null
+                ? max(0.0, 1.0 - $atmoEntity->dewPointSpread / 5.0)
+                : 0.0;
 
             // Fog visibility: fogDensity 0→1 maps to normal distance → near-zero visibility
             if ($weather->fogDensity > 0.05) {
@@ -119,6 +147,62 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
                 $dayNight->fogNearOverride = $currentNear * (1.0 - $sandFactor) + 5.0 * $sandFactor;
                 $dayNight->fogFarOverride = $currentFar * (1.0 - $sandFactor) + 40.0 * $sandFactor;
             }
+        }
+    }
+
+    private function updateRainbow(World $world, float $dt): void
+    {
+        $weather = null;
+        $dayNight = null;
+        foreach ($world->query(Weather::class) as $e) { $weather = $e->get(Weather::class); break; }
+        foreach ($world->query(DayNightCycle::class) as $e) { $dayNight = $e->get(DayNightCycle::class); break; }
+        if ($weather === null || $dayNight === null) return;
+
+        // Trigger: rain was heavy (>0.2) and just stopped (<0.05), sun is up
+        $wasRaining = $this->prevRainIntensity > 0.2;
+        $stoppedRaining = $weather->rainIntensity < 0.05;
+        $sunUp = $dayNight->getSunHeight() > 0.15;
+
+        if ($wasRaining && $stoppedRaining && $sunUp && !$this->rainbowActive) {
+            $this->rainbowActive = true;
+            $this->rainbowTimer = 45.0; // visible for 45 seconds
+            fprintf(STDERR, "[Rainbow] Appeared!\n");
+        }
+
+        $this->prevRainIntensity = $weather->rainIntensity;
+
+        // Find rainbow entity and update position/alpha
+        foreach ($world->query(Transform3D::class, MeshRenderer::class) as $entity) {
+            $mr = $entity->get(MeshRenderer::class);
+            if ($mr->materialId !== 'rainbow') continue;
+
+            $transform = $entity->get(Transform3D::class);
+
+            if ($this->rainbowActive) {
+                $this->rainbowTimer -= $dt;
+
+                // Fade: full opacity for first 30s, then fade over 15s
+                $alpha = $this->rainbowTimer > 15.0 ? 0.35 : ($this->rainbowTimer / 15.0) * 0.35;
+
+                // Position rainbow in front of the scene
+                $transform->position = new Vec3(0.0, 0.0, -80.0);
+
+                // Update material alpha
+                MaterialRegistry::register('rainbow', new Material(
+                    albedo: new Color(1.0, 1.0, 1.0),
+                    alpha: max(0.0, $alpha),
+                ));
+
+                if ($this->rainbowTimer <= 0.0) {
+                    $this->rainbowActive = false;
+                    $transform->position = new Vec3(0.0, -200.0, -60.0); // hide
+                    MaterialRegistry::register('rainbow', new Material(
+                        albedo: new Color(1.0, 1.0, 1.0),
+                        alpha: 0.0,
+                    ));
+                }
+            }
+            break;
         }
     }
 }

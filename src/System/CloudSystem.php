@@ -53,11 +53,17 @@ class CloudSystem extends AbstractSystem
             break;
         }
 
-        // Read atmosphere for cloud base altitude
+        // Read atmosphere for cloud base altitude and cloud types
         $cloudBaseAltitude = 45.0;
+        $stratusFraction = 0.0;
+        $cbFraction = 0.0;
+        $cumulusFraction = 0.3;
         foreach ($world->query(Atmosphere::class) as $entity) {
             $atmo = $entity->get(Atmosphere::class);
             $cloudBaseAltitude = $atmo->cloudBaseAltitude;
+            $stratusFraction = $atmo->stratusFraction;
+            $cbFraction = $atmo->cumulonimbusFraction;
+            $cumulusFraction = $atmo->cumulusFraction;
             break;
         }
 
@@ -80,7 +86,42 @@ class CloudSystem extends AbstractSystem
 
             if ($cloud->baseY === 0.0) {
                 $cloud->baseY = $transform->position->y;
+                $cloud->baseScaleX = $transform->scale->x;
+                $cloud->baseScaleY = $transform->scale->y;
+                $cloud->baseScaleZ = $transform->scale->z;
             }
+
+            // Assign cloud type based on atmosphere fractions
+            $cloudFrac = (float) $cloud->cloudIndex / max(1, $totalPuffs);
+            if ($cloudFrac < $cbFraction) {
+                $cloud->cloudType = 2; // cumulonimbus
+            } elseif ($cloudFrac < $cbFraction + $stratusFraction) {
+                $cloud->cloudType = 1; // stratus
+            } else {
+                $cloud->cloudType = 0; // cumulus
+            }
+
+            // Apply type-based scale morphing
+            $targetSX = $cloud->baseScaleX;
+            $targetSY = $cloud->baseScaleY;
+            $targetSZ = $cloud->baseScaleZ;
+            if ($cloud->cloudType === 1) {
+                // Stratus: flat and wide
+                $targetSX *= 1.8;
+                $targetSY *= 0.35;
+                $targetSZ *= 1.8;
+            } elseif ($cloud->cloudType === 2) {
+                // Cumulonimbus: tall and dramatic
+                $targetSX *= 1.3;
+                $targetSY *= 2.2;
+                $targetSZ *= 1.3;
+            }
+            $lerpRate = 0.5 * $dt;
+            $transform->scale = new \PHPolygon\Math\Vec3(
+                $transform->scale->x + ($targetSX - $transform->scale->x) * $lerpRate,
+                $transform->scale->y + ($targetSY - $transform->scale->y) * $lerpRate,
+                $transform->scale->z + ($targetSZ - $transform->scale->z) * $lerpRate,
+            );
 
             // Visibility: hide clouds beyond visible count
             if ($cloud->cloudIndex >= $visibleCount) {
