@@ -21,6 +21,8 @@ use PHPolygon\EngineConfig;
 use PHPolygon\System\Camera3DSystem;
 use PHPolygon\System\DayNightSystem;
 use PHPolygon\System\DoorSystem;
+use PHPolygon\System\EnvironmentalSystem;
+use PHPolygon\System\PrecipitationSystem;
 use PHPolygon\System\Physics3DSystem;
 use PHPolygon\System\Renderer3DSystem;
 use PHPolygon\System\RigidBody3DSystem;
@@ -60,6 +62,8 @@ class Game
             $engine->world->addSystem(new FootprintSystem());
             $engine->world->addSystem(new CloudSystem());
             $engine->world->addSystem(new AmbientAudioSystem($audioManager, $config->assetsPath));
+            $engine->world->addSystem(new EnvironmentalSystem());
+            $engine->world->addSystem(new PrecipitationSystem());
             $engine->world->addSystem(new DayNightSystem($commandList));
             $engine->world->addSystem(new DoorSystem());
             $engine->world->addSystem(new Transform3DSystem());

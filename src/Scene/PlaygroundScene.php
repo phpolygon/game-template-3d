@@ -14,6 +14,8 @@ use PHPolygon\Component\InstancedTerrain;
 use PHPolygon\Math\Mat4;
 use PHPolygon\Component\BoxCollider3D;
 use PHPolygon\Component\DayNightCycle;
+use PHPolygon\Component\Season;
+use PHPolygon\Component\Weather;
 use PHPolygon\Prefab\Door\DoorBuilder;
 use PHPolygon\Prefab\Door\DoorMaterials;
 use PHPolygon\Prefab\Furniture\CrateBuilder;
@@ -75,13 +77,46 @@ class PlaygroundScene extends Scene
         $this->buildLighting($builder);
         $this->buildWind($builder);
 
-        // Day/night cycle — 10 minute full day, start at morning
+        // Day/night cycle — 60s full day, start at morning
         $builder->entity('DayNight')
             ->with(new Transform3D())
             ->with(new DayNightCycle(
                 timeOfDay: 0.35,
                 dayDuration: 60.0,
+                dayCount: 4.0, // Start at full moon (half lunar cycle)
             ));
+
+        // Seasons — 4 minutes per full year (1 min per season)
+        $builder->entity('Seasons')
+            ->with(new Transform3D())
+            ->with(new Season(
+                yearProgress: 0.1,  // start in early spring
+                yearDuration: 240.0,
+            ));
+
+        // Weather — driven by season + time of day
+        $builder->entity('Weather')
+            ->with(new Transform3D())
+            ->with(new Weather(
+                cloudCoverage: 0.2,
+                humidity: 0.5,
+                temperature: 22.0,
+            ));
+
+        // Precipitation particle pool (150 particles, reused by PrecipitationSystem)
+        MaterialRegistry::register('precipitation', new Material(
+            albedo: Color::hex('#8090B0'),
+            roughness: 0.1,
+            alpha: 0.0, // invisible initially
+        ));
+        for ($i = 0; $i < 150; $i++) {
+            $builder->entity("Precip_{$i}")
+                ->with(new Transform3D(
+                    position: new Vec3(0, -100, 0), // hidden below world
+                    scale: new Vec3(0.01, 0.15, 0.01),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'precipitation'));
+        }
         $this->buildTerrain($builder);
         $this->buildOceanAndWaves($builder);
         $this->buildPalmTrees($builder);
@@ -223,13 +258,7 @@ class PlaygroundScene extends Scene
             ->with(new Transform3D(position: $moonHidden, scale: new Vec3(2.5, 2.5, 2.5)))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_disc'));
 
-        // Shadow sphere — slightly offset to create crescent
-        MaterialRegistry::register('moon_shadow', new Material(
-            albedo: Color::hex('#000000'), emission: Color::hex('#080A14'),
-        ));
-        $builder->entity('MoonShadow')
-            ->with(new Transform3D(position: $moonHidden, scale: new Vec3(2.3, 2.3, 2.3)))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_shadow'));
+        // Moon phase is rendered procedurally by proc_mode 9 shader — no shadow sphere needed
 
         MaterialRegistry::register('moon_glow', new Material(
             albedo: Color::hex('#000000'), emission: Color::hex('#3A4060'), alpha: 0.3,
