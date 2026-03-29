@@ -70,6 +70,10 @@ class VulkanRenderer3D implements Renderer3DInterface
     private Semaphore $imageAvailableSem;
     private Semaphore $renderFinishedSem;
 
+    // Shadow renderers
+    private ?VulkanShadowMapRenderer $shadowMap = null;
+    private ?VulkanCloudShadowRenderer $cloudShadow = null;
+
     /** @var ImageView[] */
     private array $swapImageViews = [];
     /** @var Framebuffer[] */
@@ -355,6 +359,16 @@ class VulkanRenderer3D implements Renderer3DInterface
         $this->commandBuffer->bindDescriptorSets(
             self::VK_PIPELINE_BIND_GRAPHICS, $this->pipelineLayout, 0, [$this->descriptorSet],
         );
+
+        // Update shadow matrices from primary directional light
+        if ($this->shadowMap !== null && !empty($this->dirLights)) {
+            $dl = $this->dirLights[0];
+            $this->shadowMap->updateLightMatrix(
+                new \PHPolygon\Math\Vec3($dl['dir'][0], $dl['dir'][1], $dl['dir'][2]),
+            );
+            $this->lightSpaceMatrix = $this->shadowMap->getLightSpaceMatrix()->toArray();
+            $this->hasShadowMap = 1;
+        }
 
         // Pass 2: Draw commands
         foreach ($commandList->getCommands() as $command) {
@@ -689,6 +703,16 @@ class VulkanRenderer3D implements Renderer3DInterface
         $this->createDescriptors();
         $this->createCommandObjects();
         $this->createSyncObjects();
+
+        // Initialize shadow renderers
+        $findHostMem = fn(array $req) => $this->findMemory($req, true);
+        $findDeviceMem = fn(array $req) => $this->findMemory($req, false);
+
+        $this->shadowMap = new VulkanShadowMapRenderer($this->device, 2048);
+        $this->shadowMap->initialize($findDeviceMem);
+
+        $this->cloudShadow = new VulkanCloudShadowRenderer($this->device, 1024);
+        $this->cloudShadow->initialize($findHostMem, $findDeviceMem);
     }
 
     private function selectQueueFamily(): int
