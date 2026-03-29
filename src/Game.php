@@ -34,6 +34,7 @@ class Game
 {
     private static float $loadingAlpha = 1.0;
     private static string $loadingStatus = '';
+    private static string $renderBackendName = '';
     private static float $minimumDisplayTime = 0.0;
 
     public static function run(): void
@@ -60,8 +61,15 @@ class Game
                 $engine->window->getFramebufferWidth(), $engine->window->getFramebufferHeight(),
                 $engine->window->getContentScaleX());
 
+            // Detect render backend
+            $backend = 'OpenGL 4.1';
+            if ($engine->renderer3D instanceof \PHPolygon\Rendering\VulkanRenderer3D) {
+                $backend = PHP_OS_FAMILY === 'Darwin' ? 'Vulkan 1.0 (MoltenVK → Metal)' : 'Vulkan 1.0';
+            }
+            self::$renderBackendName = $backend;
+
             // --- Loading screen ---
-            self::renderLoadingFrame($engine, $w, $h, 'Initializing systems...');
+            self::renderLoadingFrame($engine, $w, $h, $backend . '  |  ' . $w . 'x' . $h);
 
             // Audio with real backend
             $audioBackend = PHPGLFWAudioBackend::isAvailable()
@@ -171,6 +179,12 @@ class Game
 
             $r->drawTextCentered(self::$loadingStatus, $w / 2, $h / 2 + 20, 18.0,
                 new Color(0.5, 0.55, 0.6, $a));
+
+            // Render backend info (bottom)
+            if (self::$renderBackendName !== '') {
+                $r->drawTextCentered(self::$renderBackendName, $w / 2, $h - 40, 14.0,
+                    new Color(0.35, 0.4, 0.45, $a * 0.7));
+            }
         });
 
         $engine->run();
@@ -189,6 +203,12 @@ class Game
 
         // Status text
         $r->drawTextCentered($status, (float) ($w / 2), (float) ($h / 2 + 20), 18.0, new Color(0.5, 0.55, 0.6));
+
+        // Render backend (bottom)
+        if (self::$renderBackendName !== '') {
+            $r->drawTextCentered(self::$renderBackendName, (float) ($w / 2), (float) ($h - 40), 14.0,
+                new Color(0.35, 0.4, 0.45));
+        }
 
         $r->endFrame();
         $engine->window->swapBuffers();
