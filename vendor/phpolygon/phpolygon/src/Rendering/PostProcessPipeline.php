@@ -102,12 +102,21 @@ class PostProcessPipeline
         $this->initialized = true;
     }
 
+    /** Stored previous FBO to restore after post-process */
+    private int $previousFbo = 0;
+
     /**
      * Begin offscreen pass — redirect all rendering to the HDR FBO.
      */
     public function beginSceneCapture(): void
     {
         if (!$this->initialized) return;
+
+        // Remember what FBO was active (NanoVG might have its own)
+        $prev = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, $prev);
+        $this->previousFbo = is_int($prev) ? $prev : 0;
+
         glBindFramebuffer(GL_FRAMEBUFFER, $this->fbo);
         glViewport(0, 0, $this->width, $this->height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -115,26 +124,40 @@ class PostProcessPipeline
 
     /**
      * End scene capture and apply post-processing to screen.
+     * Saves and restores GL state to avoid corrupting NanoVG/Renderer2D.
      */
     public function applyAndPresent(): void
     {
         if (!$this->initialized) return;
 
-        // Bind default framebuffer
+        // Save current GL state that NanoVG needs
+        $prevProgram = 0;
+        glGetIntegerv(GL_CURRENT_PROGRAM, $prevProgram);
+        $prevFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, $prevFbo);
+        $prevVao = 0;
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, $prevVao);
+        $prevActiveTexture = 0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, $prevActiveTexture);
+        $depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+        $blendWasEnabled = glIsEnabled(GL_BLEND);
+
+        // Bind default framebuffer for post-process output
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, $this->width, $this->height);
-
         glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+
         glUseProgram($this->shaderProgram);
 
-        // Bind scene textures
-        glActiveTexture(GL_TEXTURE0);
+        // Bind scene textures to dedicated units (avoid conflicting with main shader units)
+        glActiveTexture(GL_TEXTURE10);
         glBindTexture(GL_TEXTURE_2D, $this->colorTexture);
-        glUniform1i(glGetUniformLocation($this->shaderProgram, 'u_scene_color'), 0);
+        glUniform1i(glGetUniformLocation($this->shaderProgram, 'u_scene_color'), 10);
 
-        glActiveTexture(GL_TEXTURE1);
+        glActiveTexture(GL_TEXTURE11);
         glBindTexture(GL_TEXTURE_2D, $this->depthTexture);
-        glUniform1i(glGetUniformLocation($this->shaderProgram, 'u_scene_depth'), 1);
+        glUniform1i(glGetUniformLocation($this->shaderProgram, 'u_scene_depth'), 11);
 
         // Uniforms
         glUniform1i(glGetUniformLocation($this->shaderProgram, 'u_width'), $this->width);
@@ -152,9 +175,14 @@ class PostProcessPipeline
         // Draw fullscreen triangle
         glBindVertexArray($this->vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
-        glBindVertexArray(0);
 
-        glEnable(GL_DEPTH_TEST);
+        // Restore GL state for NanoVG/Renderer2D
+        glBindVertexArray(is_int($prevVao) ? $prevVao : 0);
+        glUseProgram(is_int($prevProgram) ? $prevProgram : 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, is_int($prevFbo) ? $prevFbo : 0);
+        glActiveTexture(is_int($prevActiveTexture) ? $prevActiveTexture : GL_TEXTURE0);
+        if ($depthWasEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+        if ($blendWasEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
     }
 
     public function resize(int $width, int $height): void
