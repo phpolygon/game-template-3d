@@ -22,6 +22,7 @@ use PHPolygon\System\Camera3DSystem;
 use PHPolygon\System\DoorSystem;
 use PHPolygon\System\Physics3DSystem;
 use PHPolygon\System\Renderer3DSystem;
+use PHPolygon\System\RigidBody3DSystem;
 use PHPolygon\System\Transform3DSystem;
 
 class Game
@@ -62,6 +63,7 @@ class Game
             $engine->world->addSystem(new DoorSystem());
             $engine->world->addSystem(new Transform3DSystem());
             $engine->world->addSystem(new Physics3DSystem(groundPlaneY: -5.0));
+            $engine->world->addSystem(new RigidBody3DSystem());
             $engine->world->addSystem(new Camera3DSystem($commandList, $config->width, $config->height));
             $engine->world->addSystem(new InstancedTerrainSystem($commandList));
             $engine->world->addSystem(new Renderer3DSystem(

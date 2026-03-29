@@ -1501,7 +1501,7 @@ class PlaygroundScene extends Scene
 
         // === TABLE ===
         $tablePos = $this->rotateAroundHut($hx + 0.5, $hy, $hz - 0.3, $hx, $hz, $hutYaw);
-        TableBuilder::rectangular(width: 0.9, depth: 0.6, height: 0.75)
+        TableBuilder::rectangular(width: 0.9, depth: 0.6, height: 0.55)
             ->withPrefix('Hut')
             ->build($builder, $tablePos, $hutRot, new FurnitureMaterials(
                 primary: WoodMaterials::id('table'),
@@ -1509,7 +1509,7 @@ class PlaygroundScene extends Scene
             ));
 
         // === HAMMOCK ===
-        $hamPos = $this->rotateAroundHut($hx - 0.6, $hy, $hz, $hx, $hz, $hutYaw);
+        $hamPos = $this->rotateAroundHut($hx - 0.6, $hy, $hz - 0.3, $hx, $hz, $hutYaw);
         HammockBuilder::standard(length: 1.6, postHeight: 1.2)
             ->withPrefix('Hut')
             ->build($builder, $hamPos, $hutRot, new FurnitureMaterials(
@@ -1523,7 +1523,7 @@ class PlaygroundScene extends Scene
         $doorPos = $this->rotateAroundHut($hx + 0.0, $hy + 0.8, $hz + $d * 0.5, $hx, $hz, $hutYaw);
         DoorBuilder::single(
             width: 1.0, height: 1.8, thickness: 0.04,
-            hingeSide: 'left', maxAngle: 2.5,
+            hingeSide: 'left', maxAngle: 1.57,  // ~90° — stops flat against inner wall
             damping: 2.5, mass: 8.0, initialAngle: 0.1,
         )->withFrame(frameWidth: 0.06, frameDepth: $wallT)
          ->withPrefix('Hut')
@@ -1567,6 +1567,7 @@ class PlaygroundScene extends Scene
         // === CRATE (on porch) ===
         $cratePos = $this->rotateAroundHut($hx + 1.2, $hy + 0.15, $hz + $d * 0.5 + 0.5, $hx, $hz, $hutYaw);
         CrateBuilder::wooden(width: 0.35, height: 0.3, depth: 0.35)
+            ->dynamic(mass: 3.0)
             ->withPrefix('Hut')
             ->build($builder, $cratePos, $hutRot, new FurnitureMaterials(
                 primary: WoodMaterials::id('plank_dark'),
