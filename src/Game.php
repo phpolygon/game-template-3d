@@ -19,6 +19,7 @@ use PHPolygon\Audio\Backend\PHPGLFWAudioBackend;
 use PHPolygon\Engine;
 use PHPolygon\EngineConfig;
 use PHPolygon\System\Camera3DSystem;
+use PHPolygon\System\DayNightSystem;
 use PHPolygon\System\DoorSystem;
 use PHPolygon\System\Physics3DSystem;
 use PHPolygon\System\Renderer3DSystem;
@@ -59,7 +60,7 @@ class Game
             $engine->world->addSystem(new FootprintSystem());
             $engine->world->addSystem(new CloudSystem());
             $engine->world->addSystem(new AmbientAudioSystem($audioManager, $config->assetsPath));
-            $engine->world->addSystem(new AmbientLightSystem($commandList));
+            $engine->world->addSystem(new DayNightSystem($commandList));
             $engine->world->addSystem(new DoorSystem());
             $engine->world->addSystem(new Transform3DSystem());
             $engine->world->addSystem(new Physics3DSystem(groundPlaneY: -5.0));

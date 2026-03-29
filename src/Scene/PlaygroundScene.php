@@ -13,6 +13,7 @@ use App\Prefab\WaterPixel;
 use PHPolygon\Component\InstancedTerrain;
 use PHPolygon\Math\Mat4;
 use PHPolygon\Component\BoxCollider3D;
+use PHPolygon\Component\DayNightCycle;
 use PHPolygon\Prefab\Door\DoorBuilder;
 use PHPolygon\Prefab\Door\DoorMaterials;
 use PHPolygon\Prefab\Furniture\CrateBuilder;
@@ -73,6 +74,14 @@ class PlaygroundScene extends Scene
         $this->buildPlayer($builder);
         $this->buildLighting($builder);
         $this->buildWind($builder);
+
+        // Day/night cycle — 10 minute full day, start at morning
+        $builder->entity('DayNight')
+            ->with(new Transform3D())
+            ->with(new DayNightCycle(
+                timeOfDay: 0.35,
+                dayDuration: 60.0,
+            ));
         $this->buildTerrain($builder);
         $this->buildOceanAndWaves($builder);
         $this->buildPalmTrees($builder);
@@ -131,15 +140,7 @@ class PlaygroundScene extends Scene
         $center = new Vec3(0.0, -20.0, 0.0);
         $radius = 350.0;
 
-        // Main sky sphere — overall azure
-        $builder->entity('SkyDome')
-            ->with(new Transform3D(
-                position: $center,
-                scale: new Vec3($radius, $radius, $radius),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_mid'));
-
-        // Upper dome — deeper blue toward zenith (slightly smaller, shifted up)
+        // Layer 1: Outer space / upper stratosphere — deepest blue/black at zenith
         $builder->entity('SkyZenith')
             ->with(new Transform3D(
                 position: new Vec3($center->x, $center->y + 40.0, $center->z),
@@ -147,16 +148,39 @@ class PlaygroundScene extends Scene
             ))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_zenith'));
 
-        // Horizon band — warm haze where sky meets water/land
-        // Flattened, wide sphere sitting low to cover the horizon line
+        // Layer 2: Mid atmosphere / troposphere — main sky color
+        $builder->entity('SkyDome')
+            ->with(new Transform3D(
+                position: $center,
+                scale: new Vec3($radius, $radius, $radius),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_mid'));
+
+        // Layer 3: Stratosphere — transition layer between zenith and horizon
+        // Simulates Rayleigh scattering: light passes through more atmosphere at low angles
+        // making the sky whiter/paler near the horizon and deeper blue higher up
+        MaterialRegistry::register('sky_strato', new Material(
+            albedo: Color::hex('#000000'),
+            emission: Color::hex('#6A9AC0'),
+            alpha: 0.5,
+        ));
+        $builder->entity('SkyStrato')
+            ->with(new Transform3D(
+                position: new Vec3($center->x, $center->y + 10.0, $center->z),
+                scale: new Vec3($radius * 0.95, $radius * 0.55, $radius * 0.95),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_strato'));
+
+        // Layer 4: Horizon haze — dense atmosphere at ground level
+        // White/pale because all wavelengths scatter equally through thick air (Mie scattering)
         $builder->entity('SkyHorizon')
             ->with(new Transform3D(
                 position: new Vec3($center->x, $center->y - 10.0, $center->z),
-                scale: new Vec3($radius * 1.05, $radius * 0.4, $radius * 1.05),
+                scale: new Vec3($radius * 1.05, $radius * 0.35, $radius * 1.05),
             ))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_horizon'));
 
-        // Sun-side warmth — hemisphere tinted warm near the sun
+        // Layer 5: Sun-side warmth — Mie forward scattering near sun position
         $builder->entity('SkySunSide')
             ->with(new Transform3D(
                 position: new Vec3(20.0, 10.0, -120.0),
@@ -180,21 +204,39 @@ class PlaygroundScene extends Scene
                 intensity: 1.5,
             ));
 
-        // === VISIBLE SUN DISC === high over the ocean
+        // === SUN (3-layer: bright core, warm corona, soft outer glow) ===
+        $sunStart = new Vec3(20.0, 65.0, -50.0);
         $builder->entity('SunDisc')
-            ->with(new Transform3D(
-                position: new Vec3(20.0, 65.0, -50.0),
-                scale: new Vec3(5.0, 5.0, 5.0),
-            ))
+            ->with(new Transform3D(position: $sunStart, scale: new Vec3(3.0, 3.0, 3.0)))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_disc'));
 
-        // Sun glow halo — larger, softer
         $builder->entity('SunGlow')
-            ->with(new Transform3D(
-                position: new Vec3(20.0, 65.0, -51.0),
-                scale: new Vec3(11.0, 11.0, 11.0),
-            ))
+            ->with(new Transform3D(position: $sunStart, scale: new Vec3(14.0, 14.0, 14.0)))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_glow'));
+
+        // === MOON (3-layer: surface, shadow crescent, soft glow) ===
+        $moonHidden = new Vec3(0.0, -100.0, 0.0);
+        MaterialRegistry::register('moon_disc', new Material(
+            albedo: Color::hex('#000000'), emission: Color::hex('#D0D8E8'),
+        ));
+        $builder->entity('MoonDisc')
+            ->with(new Transform3D(position: $moonHidden, scale: new Vec3(2.5, 2.5, 2.5)))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_disc'));
+
+        // Shadow sphere — slightly offset to create crescent
+        MaterialRegistry::register('moon_shadow', new Material(
+            albedo: Color::hex('#000000'), emission: Color::hex('#080A14'),
+        ));
+        $builder->entity('MoonShadow')
+            ->with(new Transform3D(position: $moonHidden, scale: new Vec3(2.3, 2.3, 2.3)))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_shadow'));
+
+        MaterialRegistry::register('moon_glow', new Material(
+            albedo: Color::hex('#000000'), emission: Color::hex('#3A4060'), alpha: 0.3,
+        ));
+        $builder->entity('MoonGlow')
+            ->with(new Transform3D(position: $moonHidden, scale: new Vec3(6.0, 6.0, 6.0)))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_glow'));
 
         // === FILL LIGHT from sky ===
         // Simulates scattered blue skylight hitting surfaces facing away from sun
