@@ -15,6 +15,13 @@ use PHPolygon\Math\Mat4;
 use PHPolygon\Component\BoxCollider3D;
 use PHPolygon\Prefab\Door\DoorBuilder;
 use PHPolygon\Prefab\Door\DoorMaterials;
+use PHPolygon\Prefab\Furniture\CrateBuilder;
+use PHPolygon\Prefab\Furniture\FurnitureMaterials;
+use PHPolygon\Prefab\Furniture\HammockBuilder;
+use PHPolygon\Prefab\Furniture\LanternBuilder;
+use PHPolygon\Prefab\Furniture\ShelfBuilder;
+use PHPolygon\Prefab\Furniture\TableBuilder;
+use PHPolygon\Prefab\Furniture\WindowBuilder;
 use App\Component\Wind;
 use PHPolygon\Component\Camera3DComponent;
 use PHPolygon\Component\CharacterController3D;
@@ -1492,56 +1499,24 @@ class PlaygroundScene extends Scene
                 0.0, 0.0, -$d * 0.5, $w + $overlap * 2, $backWallExtraH, $wallT, $hutRot, WoodMaterials::id('plank_dark'));
         }
 
-        // === TABLE (inside, kept simple) ===
-        $tablePos = $this->rotateAroundHut($hx + 0.5, $hy + 0.4, $hz - 0.3, $hx, $hz, $hutYaw);
-        $builder->entity('Hut_TableTop')
-            ->with(new Transform3D(position: $tablePos, rotation: $hutRot, scale: new Vec3(0.5, 0.025, 0.35)))
-            ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('table')))
-            ->with(new BoxCollider3D(size: new Vec3(1.0, 0.8, 0.7), isStatic: true));
+        // === TABLE ===
+        $tablePos = $this->rotateAroundHut($hx + 0.5, $hy, $hz - 0.3, $hx, $hz, $hutYaw);
+        TableBuilder::rectangular(width: 0.9, depth: 0.6, height: 0.75)
+            ->withPrefix('Hut')
+            ->build($builder, $tablePos, $hutRot, new FurnitureMaterials(
+                primary: WoodMaterials::id('table'),
+                secondary: WoodMaterials::id('beam'),
+            ));
 
-        $legOffsets = [[-0.4, -0.28], [0.4, -0.28], [-0.4, 0.28], [0.4, 0.28]];
-        foreach ($legOffsets as $li => [$lx, $lz]) {
-            $builder->entity("Hut_TableLeg_{$li}")
-                ->with(new Transform3D(
-                    position: $this->rotateAroundHut($hx + 0.5 + $lx * 0.5, $hy + 0.2, $hz - 0.3 + $lz * 0.35, $hx, $hz, $hutYaw),
-                    rotation: $hutRot,
-                    scale: new Vec3(0.025, 0.2, 0.025),
-                ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
-        }
-
-        // === HAMMOCK (replaces chair) ===
-        $hamX = -0.6;
-        $hamZ = 0.0;
-        $hamPostH = 1.2;
-        foreach ([-0.8, 0.8] as $hi => $hOff) {
-            $builder->entity("Hut_HammockPost_{$hi}")
-                ->with(new Transform3D(
-                    position: $this->rotateAroundHut($hx + $hamX, $hy + $hamPostH * 0.5, $hz + $hamZ + $hOff, $hx, $hz, $hutYaw),
-                    rotation: $hutRot,
-                    scale: new Vec3(0.03, $hamPostH * 0.5, 0.03),
-                ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
-        }
-        // Hammock body (sagging fabric between posts)
-        $builder->entity('Hut_HammockBody')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx + $hamX, $hy + 0.45, $hz + $hamZ, $hx, $hz, $hutYaw),
-                rotation: $hutRot,
-                scale: new Vec3(0.25, 0.06, 0.55),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: FabricMaterials::id('hammock')));
-
-        // Rope ties (top of each post to hammock ends)
-        foreach ([-0.55, 0.55] as $ri => $rz) {
-            $builder->entity("Hut_HammockRope_{$ri}")
-                ->with(new Transform3D(
-                    position: $this->rotateAroundHut($hx + $hamX, $hy + 0.75, $hz + $hamZ + $rz, $hx, $hz, $hutYaw),
-                    rotation: $hutRot,
-                    scale: new Vec3(0.01, 0.2, 0.01),
-                ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: FabricMaterials::id('rope')));
-        }
+        // === HAMMOCK ===
+        $hamPos = $this->rotateAroundHut($hx - 0.6, $hy, $hz, $hx, $hz, $hutYaw);
+        HammockBuilder::standard(length: 1.6, postHeight: 1.2)
+            ->withPrefix('Hut')
+            ->build($builder, $hamPos, $hutRot, new FurnitureMaterials(
+                primary: WoodMaterials::id('beam'),
+                secondary: WoodMaterials::id('beam'),
+                fabric: FabricMaterials::id('hammock'),
+            ));
 
         // === DOOR (interactive, with frame, hinged on left edge) ===
         // Position flush with front wall (Z = d/2, centered in wall thickness)
@@ -1562,49 +1537,41 @@ class PlaygroundScene extends Scene
             ),
         );
 
-        // === WINDOW (cross bars + frame) ===
+        // === WINDOW ===
         $windowPos = $this->rotateAroundHut($hx + $w * 0.5 + 0.01, $hy + $wallH * 0.55, $hz, $hx, $hz, $hutYaw);
-        $windowRot = Quaternion::fromEuler(0.0, $hutYaw, 0.0);
-        $builder->entity('Hut_WindowH')
-            ->with(new Transform3D(position: $windowPos, rotation: $windowRot, scale: new Vec3(0.015, 0.015, 0.35)))
-            ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('window_frame')));
-        $builder->entity('Hut_WindowV')
-            ->with(new Transform3D(position: $windowPos, rotation: $windowRot, scale: new Vec3(0.015, 0.25, 0.015)))
-            ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('window_frame')));
-
-        // === HANGING LANTERN ===
-        $lanternX = 0.0;
-        $lanternZ = $d * 0.5 + $porchD * 0.5;
-        $lanternY = $hy + $wallH - 0.1;
-
-        // Rope from ceiling
-        $builder->entity('Hut_LanternRope')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx + $lanternX, $lanternY, $hz + $lanternZ, $hx, $hz, $hutYaw),
-                rotation: $hutRot,
-                scale: new Vec3(0.008, 0.25, 0.008),
-            ))
-            ->with(new MeshRenderer(meshId: 'cylinder', materialId: FabricMaterials::id('rope_dark')));
-
-        // Lantern body (glass)
-        $builder->entity('Hut_Lantern')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx + $lanternX, $lanternY - 0.35, $hz + $lanternZ, $hx, $hz, $hutYaw),
-                rotation: $hutRot,
-                scale: new Vec3(0.08, 0.1, 0.08),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: MetalMaterials::id('lantern_glass')));
-
-        // Warm light from lantern
-        $builder->entity('Hut_LanternLight')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx + $lanternX, $lanternY - 0.35, $hz + $lanternZ, $hx, $hz, $hutYaw),
-            ))
-            ->with(new PointLight(
-                color: Color::hex('#FFCC66'),
-                intensity: 1.5,
-                radius: 6.0,
+        WindowBuilder::cross(width: 0.7, height: 0.5)
+            ->withPrefix('Hut')
+            ->build($builder, $windowPos, Quaternion::fromEuler(0.0, $hutYaw, 0.0), new FurnitureMaterials(
+                primary: WoodMaterials::id('window_frame'),
             ));
+
+        // === HANGING LANTERN (on porch) ===
+        $lanternPos = $this->rotateAroundHut($hx, $hy + $wallH - 0.1, $hz + $d * 0.5 + $porchD * 0.5, $hx, $hz, $hutYaw);
+        LanternBuilder::hanging(ropeLength: 0.5)
+            ->withLight(intensity: 1.5, radius: 6.0, color: '#FFCC66')
+            ->withPrefix('Hut')
+            ->build($builder, $lanternPos, $hutRot, new FurnitureMaterials(
+                primary: FabricMaterials::id('rope_dark'),
+                secondary: FabricMaterials::id('rope_dark'),
+                metal: MetalMaterials::id('lantern_glass'),
+            ));
+
+        // === SHELF (against back wall) ===
+        $shelfPos = $this->rotateAroundHut($hx - 0.2, $hy + 0.6, $hz - $d * 0.5 + 0.2, $hx, $hz, $hutYaw);
+        ShelfBuilder::standard(width: 0.7, height: 0.8, depth: 0.25, shelves: 2)
+            ->withPrefix('Hut')
+            ->build($builder, $shelfPos, $hutRot, new FurnitureMaterials(
+                primary: WoodMaterials::id('plank_weathered'),
+            ));
+
+        // === CRATE (on porch) ===
+        $cratePos = $this->rotateAroundHut($hx + 1.2, $hy + 0.15, $hz + $d * 0.5 + 0.5, $hx, $hz, $hutYaw);
+        CrateBuilder::wooden(width: 0.35, height: 0.3, depth: 0.35)
+            ->withPrefix('Hut')
+            ->build($builder, $cratePos, $hutRot, new FurnitureMaterials(
+                primary: WoodMaterials::id('plank_dark'),
+            ));
+
     }
 
     /**
