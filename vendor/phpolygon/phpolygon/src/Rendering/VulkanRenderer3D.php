@@ -151,6 +151,11 @@ class VulkanRenderer3D implements Renderer3DInterface
     /** @var array<string, array{vb: Buffer, vbMem: DeviceMemory, ib: Buffer, ibMem: DeviceMemory, count: int}> */
     private array $meshCache = [];
 
+    // Instance buffer for GPU instancing (reused per frame)
+    private ?Buffer $instanceBuffer = null;
+    private ?DeviceMemory $instanceBufferMem = null;
+    private int $instanceBufferCapacity = 0;
+
     // Proc mode cache (same as OpenGL)
     /** @var array<string, int> */
     private static array $procModeCache = [];
@@ -260,8 +265,22 @@ class VulkanRenderer3D implements Renderer3DInterface
         if ($width !== $this->width || $height !== $this->height) {
             $this->width = $width;
             $this->height = $height;
-            // TODO: Swapchain recreation for resize
+            $this->recreateSwapchain();
         }
+    }
+
+    private function recreateSwapchain(): void
+    {
+        // Wait for all GPU work to complete
+        $this->device->waitIdle();
+
+        // Clean up old framebuffers and image views
+        $this->framebuffers = [];
+        $this->swapImageViews = [];
+
+        // Recreate swapchain, render pass, framebuffers
+        $this->createSwapchain();
+        $this->createRenderPass();
     }
 
     public function getWidth(): int { return $this->width; }
@@ -379,10 +398,7 @@ class VulkanRenderer3D implements Renderer3DInterface
             } elseif ($command instanceof DrawMeshInstanced) {
                 $this->applyMaterial($command->materialId);
                 $this->uploadLightingUbo();
-                // TODO: True GPU instancing — for now loop (functional, not optimal)
-                foreach ($command->matrices as $matrix) {
-                    $this->drawMeshCommand($command->meshId, $matrix);
-                }
+                $this->drawMeshInstancedCommand($command->meshId, $command->matrices);
             }
         }
 
@@ -525,6 +541,72 @@ class VulkanRenderer3D implements Renderer3DInterface
         $this->commandBuffer->bindVertexBuffers(0, [$this->meshCache[$meshId]['vb']], [0]);
         $this->commandBuffer->bindIndexBuffer($this->meshCache[$meshId]['ib'], 0, self::VK_INDEX_TYPE_UINT32);
         $this->commandBuffer->drawIndexed($this->meshCache[$meshId]['count'], 1, 0, 0, 0);
+    }
+
+    /**
+     * Draw multiple instances of a mesh in a single GPU call.
+     * Uploads instance matrices to a shared buffer, then draws with instanceCount.
+     * Falls back to loop if instance buffer can't be created.
+     *
+     * @param Mat4[] $matrices
+     */
+    private function drawMeshInstancedCommand(string $meshId, array $matrices): void
+    {
+        $meshData = MeshRegistry::get($meshId);
+        if ($meshData === null || empty($matrices)) return;
+
+        if (!isset($this->meshCache[$meshId])) {
+            $this->uploadMesh($meshId, $meshData);
+        }
+
+        $instanceCount = count($matrices);
+
+        // Pack all instance matrices into a contiguous buffer
+        // Each mat4 = 64 bytes (16 floats × 4 bytes)
+        $matrixData = '';
+        foreach ($matrices as $matrix) {
+            $matrixData .= pack('f16', ...$matrix->toArray());
+        }
+
+        $requiredSize = $instanceCount * 64;
+
+        // Grow instance buffer if needed
+        if ($this->instanceBuffer === null || $this->instanceBufferCapacity < $requiredSize) {
+            $newCapacity = max($requiredSize, 4096); // Min 4KB, grows as needed
+            $this->instanceBuffer = new Buffer(
+                $this->device, $newCapacity,
+                self::VK_BUFFER_USAGE_VERTEX, self::VK_SHARING_EXCLUSIVE,
+            );
+            $req = $this->instanceBuffer->getMemoryRequirements();
+            $reqSize = $req['size'];
+            if (!is_int($reqSize)) {
+                // Fallback to loop
+                foreach ($matrices as $matrix) {
+                    $this->drawMeshCommand($meshId, $matrix);
+                }
+                return;
+            }
+            $this->instanceBufferMem = new DeviceMemory(
+                $this->device, $reqSize, $this->findMemory($req, true),
+            );
+            $this->instanceBuffer->bindMemory($this->instanceBufferMem, 0);
+            $this->instanceBufferMem->map(0, null);
+            $this->instanceBufferCapacity = $newCapacity;
+        }
+
+        // Upload matrix data
+        $this->instanceBufferMem->write($matrixData, 0);
+
+        // Use identity push constant (instances use per-instance attributes)
+        $identityBytes = pack('f16', ...Mat4::identity()->toArray());
+        $this->commandBuffer->pushConstants($this->pipelineLayout, self::VK_SHADER_STAGE_VERTEX, 0, $identityBytes);
+
+        // Bind vertex buffer (binding 0) + instance buffer (binding 1)
+        $this->commandBuffer->bindVertexBuffers(0, [$this->meshCache[$meshId]['vb'], $this->instanceBuffer], [0, 0]);
+        $this->commandBuffer->bindIndexBuffer($this->meshCache[$meshId]['ib'], 0, self::VK_INDEX_TYPE_UINT32);
+
+        // Single GPU call for all instances
+        $this->commandBuffer->drawIndexed($this->meshCache[$meshId]['count'], $instanceCount, 0, 0, 0);
     }
 
     // =========================================================================
@@ -845,11 +927,18 @@ class VulkanRenderer3D implements Renderer3DInterface
             'fragmentShader' => $fragModule,
             'vertexBindings' => [
                 ['binding' => 0, 'stride' => 32, 'inputRate' => self::VK_VERTEX_INPUT_RATE_VERTEX],
+                ['binding' => 1, 'stride' => 64, 'inputRate' => self::VK_VERTEX_INPUT_RATE_INSTANCE], // mat4 per instance
             ],
             'vertexAttributes' => [
+                // Per-vertex: position, normal, uv
                 ['location' => 0, 'binding' => 0, 'format' => self::VK_FORMAT_R32G32B32_SFLOAT, 'offset' => 0],
                 ['location' => 1, 'binding' => 0, 'format' => self::VK_FORMAT_R32G32B32_SFLOAT, 'offset' => 12],
                 ['location' => 2, 'binding' => 0, 'format' => self::VK_FORMAT_R32G32_SFLOAT, 'offset' => 24],
+                // Per-instance: mat4 as 4× vec4 (locations 3-6)
+                ['location' => 3, 'binding' => 1, 'format' => 109, 'offset' => 0],  // VK_FORMAT_R32G32B32A32_SFLOAT
+                ['location' => 4, 'binding' => 1, 'format' => 109, 'offset' => 16],
+                ['location' => 5, 'binding' => 1, 'format' => 109, 'offset' => 32],
+                ['location' => 6, 'binding' => 1, 'format' => 109, 'offset' => 48],
             ],
             'cullMode' => self::VK_CULL_MODE_BACK,
             'frontFace' => self::VK_FRONT_FACE_CCW,
