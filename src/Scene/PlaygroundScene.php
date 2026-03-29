@@ -7,11 +7,14 @@ namespace App\Scene;
 use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
 use App\Component\PlayerBody;
+use App\Geometry\PlankWallMesh;
 use App\Prefab\SandGrain;
 use App\Prefab\WaterPixel;
 use PHPolygon\Component\InstancedTerrain;
 use PHPolygon\Math\Mat4;
 use PHPolygon\Component\BoxCollider3D;
+use PHPolygon\Prefab\Door\DoorBuilder;
+use PHPolygon\Prefab\Door\DoorMaterials;
 use App\Component\Wind;
 use PHPolygon\Component\Camera3DComponent;
 use PHPolygon\Component\CharacterController3D;
@@ -29,6 +32,12 @@ use PHPolygon\Math\Vec3;
 use PHPolygon\Rendering\Color;
 use PHPolygon\Rendering\Material;
 use PHPolygon\Rendering\MaterialRegistry;
+use PHPolygon\Rendering\Materials\FabricMaterials;
+use PHPolygon\Rendering\Materials\MetalMaterials;
+use PHPolygon\Rendering\Materials\ThatchMaterials;
+use PHPolygon\Rendering\Materials\WoodMaterials;
+use PHPolygon\Prefab\Roof\RoofBuilder;
+use PHPolygon\Prefab\Roof\RoofMaterials;
 use PHPolygon\Scene\Scene;
 use PHPolygon\Scene\SceneBuilder;
 use PHPolygon\Scene\SceneConfig;
@@ -73,7 +82,7 @@ class PlaygroundScene extends Scene
                 position: new Vec3(0.0, 1.5, 12.0),
             ))
             ->with(new Camera3DComponent(fov: 70.0, near: 0.3, far: 500.0))
-            ->with(new CharacterController3D(height: 1.8, radius: 0.4))
+            ->with(new CharacterController3D(height: 1.8, radius: 0.3))
             ->with(new FirstPersonCamera());
 
         // Visible player body — two legs visible when looking down
@@ -841,9 +850,23 @@ class PlaygroundScene extends Scene
         if (!MeshRegistry::has('cylinder')) {
             MeshRegistry::register('cylinder', CylinderMesh::generate(1.0, 2.0, 16));
         }
+        if (!MeshRegistry::has('wedge')) {
+            MeshRegistry::register('wedge', \PHPolygon\Geometry\WedgeMesh::generate(0.0));
+            // Right-triangle wedges: peak at Z=-1 (for front half) and Z=+1 (for back half)
+            MeshRegistry::register('wedge_right_neg', \PHPolygon\Geometry\WedgeMesh::generate(-1.0));
+            MeshRegistry::register('wedge_right_pos', \PHPolygon\Geometry\WedgeMesh::generate(1.0));
+        }
         if (!MeshRegistry::has('sand_grain')) {
             // Flat box — individual grain, rendered thousands of times via instancing
             MeshRegistry::register('sand_grain', BoxMesh::generate(1.0, 1.0, 1.0));
+        }
+
+        // Plank wall meshes — 3 seeded variants for visual variety
+        // Same coordinate convention as BoxMesh: centered at origin, base 2×2
+        if (!MeshRegistry::has('plank_wall_0')) {
+            MeshRegistry::register('plank_wall_0', PlankWallMesh::generate(seed: 0));
+            MeshRegistry::register('plank_wall_1', PlankWallMesh::generate(seed: 17));
+            MeshRegistry::register('plank_wall_2', PlankWallMesh::generate(seed: 42));
         }
     }
 
@@ -1208,34 +1231,11 @@ class PlaygroundScene extends Scene
 
         ));
 
-        // Beach hut materials
-        MaterialRegistry::register('hut_wood', new Material(
-            albedo: Color::hex('#8B6B3E'), roughness: 0.88,
-        ));
-        MaterialRegistry::register('hut_wood_dark', new Material(
-            albedo: Color::hex('#5C4422'), roughness: 0.90,
-        ));
-        MaterialRegistry::register('hut_thatch', new Material(
-            albedo: Color::hex('#B89850'), roughness: 0.95,
-        ));
-        MaterialRegistry::register('hut_thatch_dark', new Material(
-            albedo: Color::hex('#8A7038'), roughness: 0.95,
-        ));
-        MaterialRegistry::register('hut_floor', new Material(
-            albedo: Color::hex('#6B5530'), roughness: 0.85,
-        ));
-        MaterialRegistry::register('hut_door', new Material(
-            albedo: Color::hex('#6B4E28'), roughness: 0.82,
-        ));
-        MaterialRegistry::register('hut_window_frame', new Material(
-            albedo: Color::hex('#5A3E1E'), roughness: 0.80,
-        ));
-        MaterialRegistry::register('hut_table', new Material(
-            albedo: Color::hex('#7A5C34'), roughness: 0.75,
-        ));
-        MaterialRegistry::register('hut_chair', new Material(
-            albedo: Color::hex('#6B4E2A'), roughness: 0.78,
-        ));
+        // Beach hut materials — loaded from engine presets
+        WoodMaterials::registerAll();
+        ThatchMaterials::registerAll();
+        FabricMaterials::registerAll();
+        MetalMaterials::registerAll();
     }
 
     // =========================================================================
@@ -1244,19 +1244,53 @@ class PlaygroundScene extends Scene
 
     private function buildBeachHut(SceneBuilder $builder): void
     {
-        // Position: on the beach, slightly elevated
-        $hx = 10.0;  // X position
-        $hz = 8.0;   // Z position (mid-beach area)
-        $hy = 0.15;  // slight elevation above sand
-        $hutYaw = 0.4; // rotated slightly toward ocean
+        $hx = 10.0;
+        $hz = 8.0;
+        $hy = 0.85; // raised on stilts
+        $hutYaw = 0.4;
         $hutRot = Quaternion::fromEuler(0.0, $hutYaw, 0.0);
+        $yawQ = Quaternion::fromAxisAngle(new Vec3(0.0, 1.0, 0.0), $hutYaw);
 
-        // Dimensions
-        $w = 3.5;  // width (X)
-        $d = 3.0;  // depth (Z)
-        $wallH = 2.2; // wall height
-        $roofH = 1.2; // roof peak above walls
-        $wallT = 0.1; // wall thickness
+        $w = 3.5;
+        $d = 3.0;
+        $wallH = 2.2;
+        $roofH = 1.2;
+        $wallT = 0.1;
+        $porchD = 1.5;
+
+        // === STILTS (6 posts from ground to floor) ===
+        $stiltH = $hy * 0.5;
+        $stiltPositions = [
+            [-$w * 0.45, $d * 0.45],
+            [$w * 0.45, $d * 0.45],
+            [-$w * 0.45, -$d * 0.45],
+            [$w * 0.45, -$d * 0.45],
+            [0.0, $d * 0.45],   // mid-span front
+            [0.0, -$d * 0.45],  // mid-span back
+        ];
+        foreach ($stiltPositions as $si => [$sx, $sz]) {
+            $builder->entity("Hut_Stilt_{$si}")
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut($hx + $sx, $stiltH, $hz + $sz, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3(0.07, $stiltH, 0.07),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+        }
+
+        // Cross-braces under floor (X-pattern on left side)
+        $braceLen = sqrt(($w * 0.9) ** 2 + $hy ** 2);
+        $braceAngle = atan2($hy, $w * 0.9);
+        foreach ([1.0, -1.0] as $bi => $dir) {
+            $bRot = $yawQ->multiply(Quaternion::fromAxisAngle(new Vec3(0.0, 0.0, 1.0), $dir * $braceAngle));
+            $builder->entity("Hut_Brace_{$bi}")
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut($hx, $stiltH, $hz - $d * 0.45, $hx, $hz, $hutYaw),
+                    rotation: $bRot,
+                    scale: new Vec3(0.03, $braceLen * 0.48, 0.03),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+        }
 
         // === FLOOR ===
         $builder->entity('Hut_Floor')
@@ -1265,261 +1299,409 @@ class PlaygroundScene extends Scene
                 rotation: $hutRot,
                 scale: new Vec3($w * 0.5, 0.05, $d * 0.5),
             ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_floor'))
-            ->with(new BoxCollider3D(size: new Vec3($w, 0.1, $d), isStatic: true));
+            ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('floor')))
+            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
 
-        // === WALLS ===
-        // Back wall (solid)
+        // === WALLS (all BoxMesh — proc_mode 7 shader adds plank grain) ===
+        // All walls overlap at corners by ~10cm to guarantee no visible gaps.
+        $overlap = $wallT;
+
+        // All walls stop at wallH. The gable wedge (in RoofBuilder) covers the
+        // full triangular area above wallH up to the ridge. This avoids rectangular
+        // walls sticking above the sloped roof at the corners.
+        $frontWallExtraH = $roofH * (1.0 - ($d * 0.5) / ($d * 0.5 + $porchD + 0.7));
+        $backWallExtraH = $roofH * (1.0 - ($d * 0.5) / ($d * 0.5 + 0.7));
+
+        // Back wall
         $this->buildHutWall($builder, 'Hut_BackWall', $hx, $hy, $hz,
-            0.0, 0.0, -$d * 0.5, $w, $wallH, $wallT, $hutRot, 'hut_wood');
+            0.0, 0.0, -$d * 0.5, $w + $overlap * 2, $wallH, $wallT, $hutRot, WoodMaterials::id('plank'));
 
-        // Left wall (solid)
+        // Left wall
         $this->buildHutWall($builder, 'Hut_LeftWall', $hx, $hy, $hz,
-            -$w * 0.5, 0.0, 0.0, $wallT, $wallH, $d, $hutRot, 'hut_wood_dark');
+            -$w * 0.5, 0.0, 0.0, $wallT, $wallH, $d + $overlap * 2, $hutRot, WoodMaterials::id('plank_dark'));
 
-        // Right wall with window hole — upper and lower panels + sides
-        $this->buildHutWallWithWindow($builder, $hx, $hy, $hz, $w, $d, $wallH, $wallT, $hutRot);
+        // Right wall (with window)
+        $this->buildHutWallWithWindow($builder, $hx, $hy, $hz, $w, $d, $wallH, $wallT, $hutRot, 0.0);
 
-        // Front wall with door opening — left and right panels + top beam
+        // Front wall (with door opening — panels + top beam)
         $this->buildHutWallWithDoor($builder, $hx, $hy, $hz, $w, $d, $wallH, $wallT, $hutRot);
 
-        // === ROOF (thatched, sloped) ===
-        $roofOverhang = 0.4;
-        $roofW = $w * 0.5 + $roofOverhang;
-
-        // Ridge = top center, Eave = wall top edge
-        $ridgeY = $hy + $wallH + $roofH;
-        $eaveY = $hy + $wallH;
-        $roofHalfSpan = $d * 0.5 + $roofOverhang;
-
-        // Each roof panel: a box tilted from ridge down to eave
-        // Panel length along the slope
-        $roofSlope = sqrt($roofHalfSpan * $roofHalfSpan + $roofH * $roofH);
-        $roofAngle = atan2($roofH, $roofHalfSpan);
-
-        // Center of each panel = midpoint of ridge edge and eave edge
-        // Front panel: ridge at (hx, ridgeY, hz) → eave at (hx, eaveY, hz + roofHalfSpan)
-        $frontMidY = ($ridgeY + $eaveY) * 0.5;
-        $frontMidZ = $roofHalfSpan * 0.5;
-
-        // Back panel: ridge at (hx, ridgeY, hz) → eave at (hx, eaveY, hz - roofHalfSpan)
-        $backMidZ = -$roofHalfSpan * 0.5;
-
-        // Rotation: yaw first, then tilt around local X axis
-        $yawQ = Quaternion::fromAxisAngle(new Vec3(0.0, 1.0, 0.0), $hutYaw);
-        $frontTilt = Quaternion::fromAxisAngle(new Vec3(1.0, 0.0, 0.0), $roofAngle);
-        $backTilt = Quaternion::fromAxisAngle(new Vec3(1.0, 0.0, 0.0), -$roofAngle);
-
-        $builder->entity('Hut_RoofFront')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx, $frontMidY, $hz + $frontMidZ, $hx, $hz, $hutYaw),
-                rotation: $yawQ->multiply($frontTilt),
-                scale: new Vec3($roofW, 0.08, $roofSlope * 0.52),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_thatch'));
-
-        $builder->entity('Hut_RoofBack')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx, $frontMidY, $hz + $backMidZ, $hx, $hz, $hutYaw),
-                rotation: $yawQ->multiply($backTilt),
-                scale: new Vec3($roofW, 0.08, $roofSlope * 0.52),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_thatch_dark'));
-
-        // Ridge beam
-        $builder->entity('Hut_Ridge')
-            ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx, $ridgeY, $hz, $hx, $hz, $hutYaw),
-                rotation: $hutRot,
-                scale: new Vec3($roofW, 0.05, 0.05),
-            ))
-            ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'hut_wood_dark'));
-
-        // === SUPPORT POSTS (4 corners) ===
-        $postPositions = [
+        // === CORNER POSTS (structural timber, ground to roof) ===
+        $postH = $wallH * 0.5;
+        $cornerPositions = [
             [-$w * 0.45, $d * 0.45],
             [$w * 0.45, $d * 0.45],
             [-$w * 0.45, -$d * 0.45],
             [$w * 0.45, -$d * 0.45],
         ];
-        foreach ($postPositions as $pi => [$px, $pz]) {
-            $postWorld = $this->rotateAroundHut($hx + $px, $hy + $wallH * 0.5, $hz + $pz, $hx, $hz, $hutYaw);
+        foreach ($cornerPositions as $pi => [$px, $pz]) {
             $builder->entity("Hut_Post_{$pi}")
                 ->with(new Transform3D(
-                    position: $postWorld,
+                    position: $this->rotateAroundHut($hx + $px, $hy + $postH, $hz + $pz, $hx, $hz, $hutYaw),
                     rotation: $hutRot,
-                    scale: new Vec3(0.06, $wallH * 0.5, 0.06),
+                    scale: new Vec3(0.06, $postH, 0.06),
                 ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'hut_wood_dark'));
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
         }
 
-        // === TABLE ===
-        $tablePos = $this->rotateAroundHut($hx + 0.5, $hy + 0.4, $hz - 0.3, $hx, $hz, $hutYaw);
-        // Table top
-        $builder->entity('Hut_TableTop')
+        // === PORCH / VERANDA ===
+        // Porch floor
+        $porchCenterZ = $d * 0.5 + $porchD * 0.5;
+        $builder->entity('Hut_PorchFloor')
             ->with(new Transform3D(
-                position: $tablePos,
+                position: $this->rotateAroundHut($hx, $hy, $hz + $porchCenterZ, $hx, $hz, $hutYaw),
                 rotation: $hutRot,
-                scale: new Vec3(0.5, 0.025, 0.35),
+                scale: new Vec3($w * 0.5, 0.04, $porchD * 0.5),
             ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_table'))
+            ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('floor')))
+            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+
+        // Porch front posts (2)
+        foreach ([-1, 1] as $side) {
+            $builder->entity('Hut_PorchPost_' . ($side > 0 ? 'R' : 'L'))
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut(
+                        $hx + $side * $w * 0.45, $hy + $wallH * 0.5, $hz + $d * 0.5 + $porchD, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3(0.05, $wallH * 0.5, 0.05),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+        }
+
+        // Porch front stilts (2)
+        foreach ([-1, 1] as $side) {
+            $builder->entity('Hut_PorchStilt_' . ($side > 0 ? 'R' : 'L'))
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut(
+                        $hx + $side * $w * 0.45, $stiltH, $hz + $d * 0.5 + $porchD, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3(0.06, $stiltH, 0.06),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+        }
+
+        // Railing — bamboo bars (top rail on left, right, front; gap at steps)
+        $railH = 0.9;
+        $railY = $hy + $railH * 0.5;
+        $railThick = 0.025;
+
+        // Left railing (with collision wall)
+        $builder->entity('Hut_RailLeft')
+            ->with(new Transform3D(
+                position: $this->rotateAroundHut($hx - $w * 0.45, $railY, $hz + $d * 0.5 + $porchD * 0.5, $hx, $hz, $hutYaw),
+                rotation: $hutRot,
+                scale: new Vec3($railThick, $railH * 0.5, $porchD * 0.5),
+            ))
+            ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo')))
+            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+
+        // Right railing (with collision wall)
+        $builder->entity('Hut_RailRight')
+            ->with(new Transform3D(
+                position: $this->rotateAroundHut($hx + $w * 0.45, $railY, $hz + $d * 0.5 + $porchD * 0.5, $hx, $hz, $hutYaw),
+                rotation: $hutRot,
+                scale: new Vec3($railThick, $railH * 0.5, $porchD * 0.5),
+            ))
+            ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo')))
+            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+
+        // Front railing (two sections with gap for steps in the middle, with collision)
+        $frontRailW = ($w - 1.0) * 0.25;
+        foreach ([-1, 1] as $side) {
+            $rx = $side * ($w * 0.25 + 0.25);
+            $builder->entity('Hut_RailFront_' . ($side > 0 ? 'R' : 'L'))
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut($hx + $rx, $railY, $hz + $d * 0.5 + $porchD, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3($frontRailW, $railH * 0.5, $railThick),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo')))
+                ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+        }
+
+        // Railing vertical supports (6 bamboo spindles)
+        $spindles = [
+            [-$w * 0.45, $d * 0.5 + 0.3],
+            [-$w * 0.45, $d * 0.5 + $porchD],
+            [$w * 0.45, $d * 0.5 + 0.3],
+            [$w * 0.45, $d * 0.5 + $porchD],
+            [-$w * 0.25, $d * 0.5 + $porchD],
+            [$w * 0.25, $d * 0.5 + $porchD],
+        ];
+        foreach ($spindles as $spi => [$spx, $spz]) {
+            $builder->entity("Hut_Spindle_{$spi}")
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut($hx + $spx, $hy + $railH * 0.5, $hz + $spz, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3(0.02, $railH * 0.5, 0.02),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo_dark')));
+        }
+
+        // === STEPS (3 steps, each ≤0.28m high so CharacterController can walk up) ===
+        $stepW = 0.9;
+        $stepD = 0.35;
+        $stepCount = 3;
+        $stepH = $hy / $stepCount; // ~0.283m (under 0.3m stepHeight limit)
+        $stepsZ = $d * 0.5 + $porchD; // starts at porch front edge, no gap
+        for ($si = 0; $si < $stepCount; $si++) {
+            // Each step is a full-height column from ground to step surface
+            $columnH = $hy - $si * $stepH;
+            $stepY = $columnH * 0.5;
+            $stepZ = $stepsZ + ($si + 0.5) * $stepD;
+            $builder->entity("Hut_Step_{$si}")
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut($hx, $stepY, $hz + $stepZ, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3($stepW * 0.5, $columnH * 0.5, $stepD * 0.5),
+                ))
+                ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('plank_weathered')))
+                ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+        }
+
+        // === ROOF (thatched, asymmetric — front extends over porch) ===
+        $roof = RoofBuilder::thatched(
+            width: $w, depth: $d,
+            roofHeight: $roofH,
+            overhang: 0.7,
+            frontExtension: $porchD,
+            rafterCount: 4,
+        );
+        $roofResult = $roof->withPrefix('Hut')->build(
+            $builder,
+            basePosition: new Vec3($hx, $hy + $wallH, $hz),
+            baseRotation: $hutRot,
+            materials: new RoofMaterials(
+                panel: ThatchMaterials::id('roof'),
+                panelBack: ThatchMaterials::id('roof_dark'),
+                ridge: WoodMaterials::id('beam'),
+                rafter: WoodMaterials::id('beam'),
+                gable: WoodMaterials::id('plank_dark'),
+            ),
+        );
+
+        // Front wall extension: fill the gap between wallH and the roof at the front wall.
+        if ($frontWallExtraH > 0.05) {
+            $this->buildHutWall($builder, 'Hut_FrontFill', $hx, $hy + $wallH, $hz,
+                0.0, 0.0, $d * 0.5, $w + $overlap * 2, $frontWallExtraH, $wallT, $hutRot, WoodMaterials::id('plank'));
+        }
+
+        // Back wall extension: same treatment as front.
+        if ($backWallExtraH > 0.05) {
+            $this->buildHutWall($builder, 'Hut_BackFill', $hx, $hy + $wallH, $hz,
+                0.0, 0.0, -$d * 0.5, $w + $overlap * 2, $backWallExtraH, $wallT, $hutRot, WoodMaterials::id('plank_dark'));
+        }
+
+        // === TABLE (inside, kept simple) ===
+        $tablePos = $this->rotateAroundHut($hx + 0.5, $hy + 0.4, $hz - 0.3, $hx, $hz, $hutYaw);
+        $builder->entity('Hut_TableTop')
+            ->with(new Transform3D(position: $tablePos, rotation: $hutRot, scale: new Vec3(0.5, 0.025, 0.35)))
+            ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('table')))
             ->with(new BoxCollider3D(size: new Vec3(1.0, 0.8, 0.7), isStatic: true));
 
-        // Table legs (4)
         $legOffsets = [[-0.4, -0.28], [0.4, -0.28], [-0.4, 0.28], [0.4, 0.28]];
         foreach ($legOffsets as $li => [$lx, $lz]) {
-            $legPos = $this->rotateAroundHut(
-                $hx + 0.5 + $lx * 0.5, $hy + 0.2, $hz - 0.3 + $lz * 0.35,
-                $hx, $hz, $hutYaw,
-            );
             $builder->entity("Hut_TableLeg_{$li}")
                 ->with(new Transform3D(
-                    position: $legPos,
+                    position: $this->rotateAroundHut($hx + 0.5 + $lx * 0.5, $hy + 0.2, $hz - 0.3 + $lz * 0.35, $hx, $hz, $hutYaw),
                     rotation: $hutRot,
                     scale: new Vec3(0.025, 0.2, 0.025),
                 ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'hut_wood_dark'));
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
         }
 
-        // === CHAIR ===
-        $chairPos = $this->rotateAroundHut($hx - 0.3, $hy, $hz - 0.2, $hx, $hz, $hutYaw);
-        $chairRot = Quaternion::fromEuler(0.0, $hutYaw + 0.3, 0.0);
-
-        // Seat
-        $builder->entity('Hut_ChairSeat')
-            ->with(new Transform3D(
-                position: new Vec3($chairPos->x, $chairPos->y + 0.3, $chairPos->z),
-                rotation: $chairRot,
-                scale: new Vec3(0.2, 0.02, 0.2),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_chair'))
-            ->with(new BoxCollider3D(size: new Vec3(0.4, 0.6, 0.4), isStatic: true));
-
-        // Backrest
-        $builder->entity('Hut_ChairBack')
-            ->with(new Transform3D(
-                position: new Vec3($chairPos->x, $chairPos->y + 0.5, $chairPos->z - 0.18),
-                rotation: $chairRot,
-                scale: new Vec3(0.18, 0.15, 0.015),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_chair'));
-
-        // Chair legs (4)
-        foreach ($legOffsets as $li => [$lx, $lz]) {
-            $builder->entity("Hut_ChairLeg_{$li}")
+        // === HAMMOCK (replaces chair) ===
+        $hamX = -0.6;
+        $hamZ = 0.0;
+        $hamPostH = 1.2;
+        foreach ([-0.8, 0.8] as $hi => $hOff) {
+            $builder->entity("Hut_HammockPost_{$hi}")
                 ->with(new Transform3D(
-                    position: new Vec3(
-                        $chairPos->x + $lx * 0.18,
-                        $chairPos->y + 0.15,
-                        $chairPos->z + $lz * 0.18,
-                    ),
-                    rotation: $chairRot,
-                    scale: new Vec3(0.015, 0.15, 0.015),
+                    position: $this->rotateAroundHut($hx + $hamX, $hy + $hamPostH * 0.5, $hz + $hamZ + $hOff, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3(0.03, $hamPostH * 0.5, 0.03),
                 ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'hut_wood_dark'));
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+        }
+        // Hammock body (sagging fabric between posts)
+        $builder->entity('Hut_HammockBody')
+            ->with(new Transform3D(
+                position: $this->rotateAroundHut($hx + $hamX, $hy + 0.45, $hz + $hamZ, $hx, $hz, $hutYaw),
+                rotation: $hutRot,
+                scale: new Vec3(0.25, 0.06, 0.55),
+            ))
+            ->with(new MeshRenderer(meshId: 'box', materialId: FabricMaterials::id('hammock')));
+
+        // Rope ties (top of each post to hammock ends)
+        foreach ([-0.55, 0.55] as $ri => $rz) {
+            $builder->entity("Hut_HammockRope_{$ri}")
+                ->with(new Transform3D(
+                    position: $this->rotateAroundHut($hx + $hamX, $hy + 0.75, $hz + $hamZ + $rz, $hx, $hz, $hutYaw),
+                    rotation: $hutRot,
+                    scale: new Vec3(0.01, 0.2, 0.01),
+                ))
+                ->with(new MeshRenderer(meshId: 'cylinder', materialId: FabricMaterials::id('rope')));
         }
 
-        // === DOOR (slightly open, rotated) ===
-        $doorPos = $this->rotateAroundHut($hx + $w * 0.15, $hy + 0.8, $hz + $d * 0.5 + 0.05, $hx, $hz, $hutYaw);
-        $doorRot = Quaternion::fromEuler(0.0, $hutYaw + 0.5, 0.0); // slightly ajar
-        $builder->entity('Hut_Door')
-            ->with(new Transform3D(
-                position: $doorPos,
-                rotation: $doorRot,
-                scale: new Vec3(0.35, 0.8, 0.02),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'hut_door'));
+        // === DOOR (interactive, with frame, hinged on left edge) ===
+        // Position flush with front wall (Z = d/2, centered in wall thickness)
+        $doorPos = $this->rotateAroundHut($hx + 0.0, $hy + 0.8, $hz + $d * 0.5, $hx, $hz, $hutYaw);
+        DoorBuilder::single(
+            width: 1.0, height: 1.8, thickness: 0.04,
+            hingeSide: 'left', maxAngle: 2.5,
+            damping: 2.5, mass: 8.0, initialAngle: 0.1,
+        )->withFrame(frameWidth: 0.06, frameDepth: $wallT)
+         ->withPrefix('Hut')
+         ->build(
+            $builder,
+            position: $doorPos,
+            rotation: Quaternion::fromEuler(0.0, $hutYaw, 0.0),
+            materials: new DoorMaterials(
+                panel: WoodMaterials::id('door'),
+                frame: WoodMaterials::id('beam'),
+            ),
+        );
 
-        // === WINDOW FRAME on right wall ===
+        // === WINDOW (cross bars + frame) ===
         $windowPos = $this->rotateAroundHut($hx + $w * 0.5 + 0.01, $hy + $wallH * 0.55, $hz, $hx, $hz, $hutYaw);
         $windowRot = Quaternion::fromEuler(0.0, $hutYaw, 0.0);
-
-        // Window cross bars
         $builder->entity('Hut_WindowH')
-            ->with(new Transform3D(
-                position: $windowPos,
-                rotation: $windowRot,
-                scale: new Vec3(0.015, 0.015, 0.35),
-            ))
-            ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'hut_window_frame'));
-
+            ->with(new Transform3D(position: $windowPos, rotation: $windowRot, scale: new Vec3(0.015, 0.015, 0.35)))
+            ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('window_frame')));
         $builder->entity('Hut_WindowV')
+            ->with(new Transform3D(position: $windowPos, rotation: $windowRot, scale: new Vec3(0.015, 0.25, 0.015)))
+            ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('window_frame')));
+
+        // === HANGING LANTERN ===
+        $lanternX = 0.0;
+        $lanternZ = $d * 0.5 + $porchD * 0.5;
+        $lanternY = $hy + $wallH - 0.1;
+
+        // Rope from ceiling
+        $builder->entity('Hut_LanternRope')
             ->with(new Transform3D(
-                position: $windowPos,
-                rotation: $windowRot,
-                scale: new Vec3(0.015, 0.25, 0.015),
+                position: $this->rotateAroundHut($hx + $lanternX, $lanternY, $hz + $lanternZ, $hx, $hz, $hutYaw),
+                rotation: $hutRot,
+                scale: new Vec3(0.008, 0.25, 0.008),
             ))
-            ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'hut_window_frame'));
+            ->with(new MeshRenderer(meshId: 'cylinder', materialId: FabricMaterials::id('rope_dark')));
+
+        // Lantern body (glass)
+        $builder->entity('Hut_Lantern')
+            ->with(new Transform3D(
+                position: $this->rotateAroundHut($hx + $lanternX, $lanternY - 0.35, $hz + $lanternZ, $hx, $hz, $hutYaw),
+                rotation: $hutRot,
+                scale: new Vec3(0.08, 0.1, 0.08),
+            ))
+            ->with(new MeshRenderer(meshId: 'sphere', materialId: MetalMaterials::id('lantern_glass')));
+
+        // Warm light from lantern
+        $builder->entity('Hut_LanternLight')
+            ->with(new Transform3D(
+                position: $this->rotateAroundHut($hx + $lanternX, $lanternY - 0.35, $hz + $lanternZ, $hx, $hz, $hutYaw),
+            ))
+            ->with(new PointLight(
+                color: Color::hex('#FFCC66'),
+                intensity: 1.5,
+                radius: 6.0,
+            ));
     }
 
+    /**
+     * Build a plank wall using the procedural PlankWallMesh.
+     */
+    private function buildPlankWall(SceneBuilder $builder, string $name, float $hx, float $hy, float $hz,
+        float $offX, float $offY, float $offZ, float $w, float $h, float $d,
+        Quaternion $rot, string $matId, int $variant): void
+    {
+        $hutYaw = 0.4;
+        $meshId = 'plank_wall_' . ($variant % 3);
+
+        // PlankWallMesh is centered like BoxMesh (X/Y: -1 to +1), but has baked-in
+        // depth (Z: ±0.08). Scale X/Y like BoxMesh, Z = 1.0 to preserve plank relief.
+        $builder->entity($name)
+            ->with(new Transform3D(
+                position: $this->rotateAroundHut($hx + $offX, $hy + $offY, $hz + $offZ, $hx, $hz, $hutYaw),
+                rotation: $rot,
+                scale: new Vec3($w * 0.5, $h * 0.5, 1.0),
+            ))
+            ->with(new MeshRenderer(meshId: $meshId, materialId: $matId))
+            ->with(new BoxCollider3D(size: new Vec3($w, $h, 0.16), isStatic: true));
+    }
+
+    /**
+     * Build a simple box wall (for sections around door/window openings).
+     */
     private function buildHutWall(SceneBuilder $builder, string $name, float $hx, float $hy, float $hz,
         float $offX, float $offY, float $offZ, float $w, float $h, float $d,
         Quaternion $rot, string $matId): void
     {
-        $pos = $this->rotateAroundHut($hx + $offX, $hy + $h * 0.5 + $offY, $hz + $offZ, $hx, $hz,
-            asin($rot->rotateVec3(new Vec3(1.0, 0.0, 0.0))->z) * -1.0 // extract yaw
-        );
-        // Simpler: use the hutYaw stored
+        $hutYaw = 0.4;
+        // BoxMesh is 2×2×2. Collider size matches mesh; the engine's physics
+        // now transforms corners through world matrix (handles rotation+scale).
         $builder->entity($name)
             ->with(new Transform3D(
-                position: $this->rotateAroundHut($hx + $offX, $hy + $h * 0.5, $hz + $offZ, $hx, $hz, 0.4),
+                position: $this->rotateAroundHut($hx + $offX, $hy + $h * 0.5, $hz + $offZ, $hx, $hz, $hutYaw),
                 rotation: $rot,
                 scale: new Vec3($w * 0.5, $h * 0.5, $d * 0.5),
             ))
             ->with(new MeshRenderer(meshId: 'box', materialId: $matId))
-            ->with(new BoxCollider3D(size: new Vec3($w, $h, $d), isStatic: true));
+            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
     }
 
     private function buildHutWallWithDoor(SceneBuilder $builder, float $hx, float $hy, float $hz,
         float $w, float $d, float $wallH, float $wallT, Quaternion $hutRot): void
     {
-        $doorW = 0.8;
-        $doorH = 1.6;
-        $hutYaw = 0.4;
+        $doorW = 1.1; // wide enough for player capsule (0.6m diameter + margin)
+        $doorH = 1.8;
+        $overlap = $wallT;
+        $wExt = $w + $overlap * 2; // wider to overlap side walls
 
-        // Left of door
-        $leftW = ($w - $doorW) * 0.5 - 0.1;
+        $panelW = ($wExt - $doorW) * 0.5;
         $this->buildHutWall($builder, 'Hut_FrontLeft', $hx, $hy, $hz,
-            -($doorW * 0.5 + $leftW * 0.5), 0.0, $d * 0.5, $leftW, $wallH, $wallT, $hutRot, 'hut_wood');
+            -($doorW * 0.5 + $panelW * 0.5), 0.0, $d * 0.5, $panelW, $wallH, $wallT, $hutRot, WoodMaterials::id('plank'));
 
-        // Right of door
         $this->buildHutWall($builder, 'Hut_FrontRight', $hx, $hy, $hz,
-            $doorW * 0.5 + $leftW * 0.5, 0.0, $d * 0.5, $leftW, $wallH, $wallT, $hutRot, 'hut_wood');
+            $doorW * 0.5 + $panelW * 0.5, 0.0, $d * 0.5, $panelW, $wallH, $wallT, $hutRot, WoodMaterials::id('plank'));
 
-        // Top beam above door
         $topH = $wallH - $doorH;
         $this->buildHutWall($builder, 'Hut_FrontTop', $hx, $hy + $doorH, $hz,
-            0.0, 0.0, $d * 0.5, $doorW + 0.1, $topH, $wallT, $hutRot, 'hut_wood_dark');
+            0.0, 0.0, $d * 0.5, $doorW + 0.1, $topH, $wallT, $hutRot, WoodMaterials::id('plank_dark'));
     }
 
     private function buildHutWallWithWindow(SceneBuilder $builder, float $hx, float $hy, float $hz,
-        float $w, float $d, float $wallH, float $wallT, Quaternion $hutRot): void
+        float $w, float $d, float $wallH, float $wallT, Quaternion $hutRot, float $roofH = 0.0): void
     {
         $winW = 0.7;
         $winH = 0.5;
-        $winY = $wallH * 0.5; // window center height
-        $hutYaw = 0.4;
+        $winY = $wallH * 0.5;
+        $overlap = $wallT;
+        $dExt = $d + $overlap * 2;
 
-        // Below window
+        // Right wall extended to half-gable height (matching left wall)
+        $totalSideWallH = $wallH + $roofH * 0.5;
+
         $this->buildHutWall($builder, 'Hut_RightLower', $hx, $hy, $hz,
-            $w * 0.5, 0.0, 0.0, $wallT, $winY - $winH * 0.5, $d, $hutRot, 'hut_wood');
+            $w * 0.5, 0.0, 0.0, $wallT, $winY - $winH * 0.5, $dExt, $hutRot, WoodMaterials::id('plank'));
 
-        // Above window
-        $aboveH = $wallH - ($winY + $winH * 0.5);
+        // Above window: extends to half-gable height
+        $aboveH = $totalSideWallH - ($winY + $winH * 0.5);
         $this->buildHutWall($builder, 'Hut_RightUpper', $hx, $hy + $winY + $winH * 0.5, $hz,
-            $w * 0.5, 0.0, 0.0, $wallT, $aboveH, $d, $hutRot, 'hut_wood');
+            $w * 0.5, 0.0, 0.0, $wallT, $aboveH, $dExt, $hutRot, WoodMaterials::id('plank'));
 
-        // Left of window
-        $sideD = ($d - $winW) * 0.5;
+        $sideD = ($dExt - $winW) * 0.5;
         $this->buildHutWall($builder, 'Hut_RightWinLeft', $hx, $hy + $winY - $winH * 0.5, $hz,
-            $w * 0.5, 0.0, -($winW * 0.5 + $sideD * 0.5), $wallT, $winH, $sideD, $hutRot, 'hut_wood');
+            $w * 0.5, 0.0, -($winW * 0.5 + $sideD * 0.5), $wallT, $winH, $sideD, $hutRot, WoodMaterials::id('plank'));
 
-        // Right of window
         $this->buildHutWall($builder, 'Hut_RightWinRight', $hx, $hy + $winY - $winH * 0.5, $hz,
-            $w * 0.5, 0.0, $winW * 0.5 + $sideD * 0.5, $wallT, $winH, $sideD, $hutRot, 'hut_wood');
+            $w * 0.5, 0.0, $winW * 0.5 + $sideD * 0.5, $wallT, $winH, $sideD, $hutRot, WoodMaterials::id('plank'));
     }
 
-    /** Rotate a point around the hut center (hx, hz) by yaw angle */
+    /**
+     * Rotate a point around the hut center (hx, hz) by yaw angle.
+     * Uses negated sin to match Quaternion::fromEuler(0, yaw, 0) convention,
+     * which rotates Z in the -sin direction (clockwise when viewed from +Y).
+     */
     private function rotateAroundHut(float $x, float $y, float $z, float $cx, float $cz, float $yaw): Vec3
     {
         $dx = $x - $cx;
@@ -1527,9 +1709,9 @@ class PlaygroundScene extends Scene
         $cosY = cos($yaw);
         $sinY = sin($yaw);
         return new Vec3(
-            $cx + $dx * $cosY - $dz * $sinY,
+            $cx + $dx * $cosY + $dz * $sinY,
             $y,
-            $cz + $dx * $sinY + $dz * $cosY,
+            $cz - $dx * $sinY + $dz * $cosY,
         );
     }
 }

@@ -6,6 +6,7 @@ namespace App\System;
 
 use App\Component\FirstPersonCamera;
 use PHPolygon\Component\CharacterController3D;
+use PHPolygon\Component\HingeJoint;
 use PHPolygon\Component\Transform3D;
 use PHPolygon\ECS\AbstractSystem;
 use PHPolygon\ECS\World;
@@ -177,6 +178,46 @@ class FirstPersonCameraSystem extends AbstractSystem
                     }
                 }
             }
+
+            // Door interaction: push nearby hinge-joint entities when moving
+            if ($moveLen > 0.001) {
+                $this->pushNearbyDoors($world, $transform->position, $forward, $dt);
+            }
+        }
+    }
+
+    private const DOOR_PUSH_RANGE = 1.8;
+    private const DOOR_PUSH_FORCE = 200.0;
+
+    private function pushNearbyDoors(World $world, Vec3 $playerPos, Vec3 $playerForward, float $dt): void
+    {
+        foreach ($world->query(HingeJoint::class, Transform3D::class) as $entity) {
+            $doorTransform = $world->getComponent($entity->id, Transform3D::class);
+            $hinge = $world->getComponent($entity->id, HingeJoint::class);
+
+            $toDoor = $doorTransform->position->sub($playerPos);
+            $dist = sqrt($toDoor->x ** 2 + $toDoor->z ** 2);
+
+            if ($dist > self::DOOR_PUSH_RANGE || $dist < 0.01) {
+                continue;
+            }
+
+            $toDoorNorm = new Vec3($toDoor->x / $dist, 0.0, $toDoor->z / $dist);
+            $pushDot = $playerForward->x * $toDoorNorm->x + $playerForward->z * $toDoorNorm->z;
+
+            if ($pushDot < 0.3) {
+                continue;
+            }
+
+            $doorForward = $hinge->axis->x === 0.0 && $hinge->axis->z === 0.0
+                ? $doorTransform->rotation->rotateVec3(new Vec3(0.0, 0.0, 1.0))
+                : $doorTransform->rotation->rotateVec3(new Vec3(1.0, 0.0, 0.0));
+
+            $playerDoorDot = $toDoorNorm->x * $doorForward->x + $toDoorNorm->z * $doorForward->z;
+            $sideSign = $playerDoorDot < 0 ? 1.0 : -1.0;
+
+            $forceFactor = (1.0 - $dist / self::DOOR_PUSH_RANGE) * $pushDot;
+            $hinge->applyImpulse($sideSign * self::DOOR_PUSH_FORCE * $forceFactor * $dt);
         }
     }
 }
