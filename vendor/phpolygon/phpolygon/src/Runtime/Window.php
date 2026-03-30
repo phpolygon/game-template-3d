@@ -29,6 +29,7 @@ class Window
         private int $height,
         private string $title,
         private bool $vsync = true,
+        private bool $useVulkan = false,
         private bool $resizable = true,
     ) {}
 
@@ -38,14 +39,20 @@ class Window
             throw new RuntimeException('Failed to initialize GLFW');
         }
 
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+        if ($this->useVulkan) {
+            // Vulkan: no OpenGL context — MoltenVK provides Metal surface
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        } else {
+            // OpenGL 4.1 core profile
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+            // 4x MSAA — hardware anti-aliasing, zero cost on modern GPUs
+            glfwWindowHint(GLFW_SAMPLES, 4);
+        }
         glfwWindowHint(GLFW_RESIZABLE, $this->resizable ? GL_TRUE : GL_FALSE);
         glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-        // 4x MSAA — hardware anti-aliasing, zero cost on modern GPUs
-        glfwWindowHint(GLFW_SAMPLES, 4);
 
         // If dimensions are 0, start with small splash window — game calls detectAndResize() later
         if ($this->width <= 0 || $this->height <= 0) {
