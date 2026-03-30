@@ -57,7 +57,7 @@ float computeSSAO(vec2 uv) {
         }
     }
 
-    return 1.0 - (occlusion / float(samples)) * 0.6;
+    return 1.0 - (occlusion / float(samples)) * 0.85; // Stronger AO for visible effect
 }
 
 // ================================================================
@@ -66,7 +66,7 @@ float computeSSAO(vec2 uv) {
 
 vec3 computeBloom(vec2 uv) {
     vec3 bloom = vec3(0.0);
-    float bloomThreshold = 1.0;
+    float bloomThreshold = 0.55; // Lower threshold — scene is already gamma-corrected
 
     // Sample bright pixels in a star pattern
     vec2 texelSize = 1.0 / vec2(float(u_width), float(u_height));
@@ -83,7 +83,7 @@ vec3 computeBloom(vec2 uv) {
         }
     }
 
-    return bloom * 0.15;
+    return bloom * 0.3; // Stronger bloom since input is LDR
 }
 
 // ================================================================
@@ -193,11 +193,10 @@ void main() {
         color = computeDOF(uv, color);
     }
 
-    // ACES Tone Mapping (HDR → LDR)
-    color = acesToneMap(color);
+    // Skip ACES + gamma — main shader already outputs gamma-corrected LDR.
+    // When main shader is converted to linear HDR output, re-enable these.
+    // color = acesToneMap(color);
+    // color = pow(color, vec3(1.0 / 2.2));
 
-    // Gamma correction
-    color = pow(color, vec3(1.0 / 2.2));
-
-    frag_color = vec4(color, 1.0);
+    frag_color = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
