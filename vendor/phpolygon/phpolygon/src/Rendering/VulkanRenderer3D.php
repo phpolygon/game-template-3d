@@ -745,11 +745,17 @@ class VulkanRenderer3D implements Renderer3DInterface
     {
         $this->ensureMacOSVulkanEnv();
 
-        $this->instance = new Instance('PHPolygon', 1, 'PHPolygon', 1, null, false, [
-            'VK_KHR_surface',
-            'VK_EXT_metal_surface',
-            'VK_KHR_portability_enumeration',
-        ]);
+        // Query GLFW for required Vulkan instance extensions
+        $glfwExtensions = glfwGetRequiredInstanceExtensions();
+        $extensions = is_array($glfwExtensions) ? $glfwExtensions : [];
+        // Ensure portability enumeration is included (needed for MoltenVK)
+        if (!in_array('VK_KHR_portability_enumeration', $extensions, true)) {
+            $extensions[] = 'VK_KHR_portability_enumeration';
+        }
+
+        fprintf(STDERR, "[Vulkan] Instance extensions: %s\n", implode(', ', $extensions));
+
+        $this->instance = new Instance('PHPolygon', 1, 'PHPolygon', 1, null, false, $extensions);
 
         $this->surface = new Surface($this->instance, $windowHandle);
 
