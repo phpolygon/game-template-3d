@@ -62,8 +62,11 @@ class Window
 
         $this->handle = glfwCreateWindow($this->width, $this->height, $this->title, null, null);
 
-        glfwMakeContextCurrent($this->handle);
-        glfwSwapInterval($this->vsync ? 1 : 0);
+        // OpenGL: set context + vsync. Vulkan: skip (no GL context)
+        if (!$this->useVulkan) {
+            glfwMakeContextCurrent($this->handle);
+            glfwSwapInterval($this->vsync ? 1 : 0);
+        }
 
         // Get content scale for HiDPI
         $csX = 1.0;
