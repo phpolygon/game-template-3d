@@ -99,19 +99,22 @@ class PrecipitationSystem extends AbstractSystem
             $rz = cos($seed * 1.7) * 15.0;
 
             if ($weather->rainIntensity > 0.05) {
-                // Rain: fast falling, slight wind drift, stops at ground
+                // Rain: fast falling, slight wind drift
                 $speed = 12.0 + sin($seed * 3.1) * 3.0;
-                $y = 15.0 - fmod(($this->time * $speed + sin($seed) * 10.0), 16.0);
-                $y = max(0.05, $y);
+                $fallCycle = fmod($this->time * $speed + sin($seed) * 10.0, 16.0);
+                $y = 15.0 - $fallCycle;
+                if ($y < -1.0) $y += 16.0;
                 $x = $playerPos->x + $rx + $windX * ($this->time * 0.5);
                 $z = $playerPos->z + $rz + $windZ * ($this->time * 0.5);
                 $transform->position = new Vec3($x, $playerPos->y + $y, $z);
                 $transform->scale = new Vec3(0.01, 0.15 + $weather->rainIntensity * 0.1, 0.01);
             } elseif ($weather->snowIntensity > 0.05) {
-                // Snow: slow falling, tumbling sideways, stops at ground level
+                // Snow: slow falling, tumbling sideways
                 $speed = 1.5 + sin($seed * 2.3) * 0.5;
-                $y = 10.0 - fmod(($this->time * $speed + sin($seed) * 8.0), 12.0);
-                $y = max(0.1, $y); // don't fall below ground
+                $fallCycle = fmod($this->time * $speed + sin($seed) * 8.0, 12.0);
+                $y = 10.0 - $fallCycle;
+                // When near ground, reset to top (seamless loop)
+                if ($y < -1.0) $y += 12.0;
                 $wobbleX = sin($this->time * 1.5 + $seed) * 0.5;
                 $wobbleZ = cos($this->time * 1.2 + $seed * 0.7) * 0.5;
                 $x = $playerPos->x + $rx + $wobbleX;
