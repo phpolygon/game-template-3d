@@ -53,23 +53,101 @@ class Game
             $commandList = $engine->commandList3D;
             $config = $engine->getConfig();
 
-            // Window is already maximized by Engine — get actual dimensions
             $w = $engine->window->getWidth();
             $h = $engine->window->getHeight();
-            fprintf(STDERR, "[Startup] Window: %dx%d  Framebuffer: %dx%d  Scale: %.1f\n",
-                $w, $h,
-                $engine->window->getFramebufferWidth(), $engine->window->getFramebufferHeight(),
-                $engine->window->getContentScaleX());
+            $fbW = $engine->window->getFramebufferWidth();
+            $fbH = $engine->window->getFramebufferHeight();
+            $scale = $engine->window->getContentScaleX();
 
-            // Detect render backend
+            // Detect system info
             $backend = 'OpenGL 4.1';
             if ($engine->renderer3D instanceof \PHPolygon\Rendering\VulkanRenderer3D) {
                 $backend = PHP_OS_FAMILY === 'Darwin' ? 'Vulkan 1.0 (MoltenVK → Metal)' : 'Vulkan 1.0';
             }
             self::$renderBackendName = $backend;
 
-            // --- Loading screen ---
-            self::renderLoadingFrame($engine, $w, $h, $backend . '  |  ' . $w . 'x' . $h);
+            $sysInfo = [
+                'Engine'     => 'PHPolygon 3D',
+                'Renderer'   => $backend,
+                'Display'    => "{$w}x{$h}" . ($scale > 1.0 ? " ({$fbW}x{$fbH} Retina)" : ''),
+                'Platform'   => PHP_OS_FAMILY . ' ' . php_uname('m'),
+                'PHP'        => PHP_VERSION,
+                'Memory'     => ini_get('memory_limit'),
+            ];
+
+            // =====================================================================
+            // STARTUP SCREEN — interactive, wait for click
+            // =====================================================================
+            $startClicked = false;
+            $buttonX = (float)($w / 2 - 120);
+            $buttonY = (float)($h / 2 + 80);
+            $buttonW = 240.0;
+            $buttonH = 50.0;
+
+            while (!$engine->window->shouldClose() && !$startClicked) {
+                $engine->window->pollEvents();
+                $engine->input->endFrame(); // process input state
+
+                // Check mouse click on Start button
+                $mx = $engine->input->getMouseX();
+                $my = $engine->input->getMouseY();
+                $hover = $mx >= $buttonX && $mx <= $buttonX + $buttonW
+                      && $my >= $buttonY && $my <= $buttonY + $buttonH;
+
+                if ($hover && $engine->input->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+                    $startClicked = true;
+                }
+
+                // Draw startup screen
+                $r = $engine->renderer2D;
+                $r->beginFrame();
+
+                // Background
+                $r->drawRect(0, 0, (float)$w, (float)$h, new Color(0.02, 0.04, 0.08));
+
+                // Title
+                $r->drawTextCentered('PHPolygon 3D', (float)($w / 2), 60.0, 48.0,
+                    new Color(0.85, 0.78, 0.55));
+                $r->drawTextCentered('Beach Demo', (float)($w / 2), 100.0, 20.0,
+                    new Color(0.5, 0.55, 0.6));
+
+                // System info panel
+                $panelX = (float)($w / 2 - 200);
+                $panelY = 140.0;
+                $r->drawRoundedRect($panelX, $panelY, 400.0, (float)(count($sysInfo) * 28 + 20), 8.0,
+                    new Color(0.06, 0.08, 0.14));
+
+                $lineY = $panelY + 18.0;
+                foreach ($sysInfo as $label => $value) {
+                    $r->drawText($label, $panelX + 20.0, $lineY, 15.0, new Color(0.4, 0.45, 0.5));
+                    $r->drawText($value, $panelX + 140.0, $lineY, 15.0, new Color(0.8, 0.82, 0.85));
+                    $lineY += 28.0;
+                }
+
+                // Start button
+                $btnColor = $hover
+                    ? new Color(0.2, 0.5, 0.8)
+                    : new Color(0.12, 0.35, 0.6);
+                $r->drawRoundedRect($buttonX, $buttonY, $buttonW, $buttonH, 10.0, $btnColor);
+                $r->drawTextCentered('Start', (float)($w / 2), $buttonY + 32.0, 22.0,
+                    new Color(1.0, 1.0, 1.0));
+
+                // Version info bottom
+                $r->drawTextCentered($backend . '  |  ' . $w . 'x' . $h,
+                    (float)($w / 2), (float)($h - 20), 12.0, new Color(0.3, 0.35, 0.4));
+
+                $r->endFrame();
+                if (!($engine->renderer3D instanceof \PHPolygon\Rendering\VulkanRenderer3D)) {
+                    $engine->window->swapBuffers();
+                }
+
+                usleep(16666); // ~60fps
+            }
+
+            // =====================================================================
+            // LOADING PHASE — systems + scene
+            // =====================================================================
+            self::renderLoadingFrame($engine, $w, $h, 'Initializing systems...');
 
             // Audio with real backend
             $audioBackend = PHPGLFWAudioBackend::isAvailable()
