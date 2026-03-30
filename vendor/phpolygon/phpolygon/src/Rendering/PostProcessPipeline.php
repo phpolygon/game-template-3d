@@ -184,10 +184,11 @@ class PostProcessPipeline
         glBindVertexArray($this->vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        // Restore GL state for NanoVG/Renderer2D
+        // Restore GL state for NanoVG/Renderer2D — but STAY on FBO 0 (screen)
+        // Do NOT restore prevFbo — the post-processed image is on the screen now,
+        // and renderer2D must draw its overlay here, not back on the PostProcess FBO.
         glBindVertexArray(is_int($prevVao) ? $prevVao : 0);
         glUseProgram(is_int($prevProgram) ? $prevProgram : 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, is_int($prevFbo) ? $prevFbo : 0);
         glActiveTexture(is_int($prevActiveTexture) ? $prevActiveTexture : GL_TEXTURE0);
         if ($depthWasEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
         if ($blendWasEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
