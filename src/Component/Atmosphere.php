@@ -125,6 +125,14 @@ class Atmosphere extends AbstractComponent
     #[Hidden]
     public float $time = 0.0;
 
+    /** Accumulated snow cover 0-1 (builds up over time while snowing, melts when not) */
+    #[Hidden]
+    public float $snowAccumulation = 0.0;
+
+    /** Accumulated rain wetness 0-1 (builds up during rain, dries when not) */
+    #[Hidden]
+    public float $wetAccumulation = 0.0;
+
     /** Seconds remaining where AtmosphereSystem should not overwrite Weather values (for testing shortcuts) */
     #[Hidden]
     public float $forcedTimer = 0.0;

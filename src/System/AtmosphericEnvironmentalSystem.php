@@ -111,9 +111,41 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
             $dayNight->cloudDarkening = min(0.85, max($cloudDark, $stormDark));
             $dayNight->lightningFlash = $weather->lightningFlash;
 
+            // Snow/rain accumulation (time-based, not instant)
+            $atmoComp = null;
+            foreach ($world->query(Atmosphere::class) as $ae) { $atmoComp = $ae->get(Atmosphere::class); break; }
+            if ($atmoComp !== null) {
+                // Snow builds up while snowing, melts when not
+                if ($weather->snowIntensity > 0.05) {
+                    // Accumulation rate: ~0.1 per second at full intensity → full cover in ~10s
+                    $atmoComp->snowAccumulation = min(1.0,
+                        $atmoComp->snowAccumulation + $weather->snowIntensity * $dt * 0.1);
+                } else {
+                    // Melt rate: slower than accumulation, depends on temperature
+                    $meltRate = max(0.0, $weather->temperature) * 0.005 + 0.01;
+                    $atmoComp->snowAccumulation = max(0.0,
+                        $atmoComp->snowAccumulation - $meltRate * $dt);
+                }
+
+                // Wet ground builds up during rain, dries after
+                if ($weather->rainIntensity > 0.05) {
+                    $atmoComp->wetAccumulation = min(1.0,
+                        $atmoComp->wetAccumulation + $weather->rainIntensity * $dt * 0.15);
+                } else {
+                    // Drying rate: faster in sun, slower at night
+                    $dryRate = 0.02 + max(0.0, $dayNight->getSunHeight()) * 0.05;
+                    $atmoComp->wetAccumulation = max(0.0,
+                        $atmoComp->wetAccumulation - $dryRate * $dt);
+                }
+            }
+
             // Weather surface data → pushed to shader via DayNightSystem
-            $dayNight->weatherRainIntensity = $weather->rainIntensity;
-            $dayNight->weatherSnowCoverage = $weather->snowIntensity;
+            $dayNight->weatherRainIntensity = $atmoComp !== null
+                ? max($weather->rainIntensity, $atmoComp->wetAccumulation)
+                : $weather->rainIntensity;
+            $dayNight->weatherSnowCoverage = $atmoComp !== null
+                ? $atmoComp->snowAccumulation
+                : $weather->snowIntensity;
             $dayNight->weatherTemperature = $weather->temperature;
             $dayNight->weatherStormIntensity = $weather->stormIntensity;
 

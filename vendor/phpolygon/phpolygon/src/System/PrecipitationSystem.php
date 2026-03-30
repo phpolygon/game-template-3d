@@ -99,39 +99,27 @@ class PrecipitationSystem extends AbstractSystem
             $rz = cos($seed * 1.7) * 15.0;
 
             if ($weather->rainIntensity > 0.05) {
-                // Rain: fast falling, slight wind drift
+                // Rain: fast falling, slight wind drift, disappear at ground
                 $speed = 12.0 + sin($seed * 3.1) * 3.0;
-                $fallCycle = fmod($this->time * $speed + sin($seed) * 10.0, 16.0);
-                $y = 15.0 - $fallCycle;
-                if ($y < -1.0) $y += 16.0;
+                $fallCycle = fmod($this->time * $speed + sin($seed) * 10.0, 15.0);
+                $y = max(0.0, 15.0 - $fallCycle);
                 $x = $playerPos->x + $rx + $windX * ($this->time * 0.5);
                 $z = $playerPos->z + $rz + $windZ * ($this->time * 0.5);
                 $transform->position = new Vec3($x, $playerPos->y + $y, $z);
                 $transform->scale = new Vec3(0.01, 0.15 + $weather->rainIntensity * 0.1, 0.01);
             } elseif ($weather->snowIntensity > 0.05) {
-                // Snow: 70% falling flakes + 30% settled on ground
-                $isFalling = ($particleIndex % 10) < 7;
+                // Snow: continuous fall, disappear at ground, respawn at top
+                // The actual snow cover is handled by the shader (u_snow_coverage accumulation)
+                $speed = 1.5 + sin($seed * 2.3) * 0.5;
+                $fallCycle = fmod($this->time * $speed + sin($seed) * 8.0, 10.0);
+                $y = 10.0 - $fallCycle; // 10m above player → 0m at feet
 
-                if ($isFalling) {
-                    // Falling: slow descent with wobble, reset at ground
-                    $speed = 1.5 + sin($seed * 2.3) * 0.5;
-                    $fallCycle = fmod($this->time * $speed + sin($seed) * 8.0, 11.0);
-                    $y = 10.0 - $fallCycle;
-                    if ($y < 0.0) $y = 10.0 - fmod($fallCycle, 1.0); // snap back to top
-
-                    $wobbleX = sin($this->time * 1.5 + $seed) * 0.5;
-                    $wobbleZ = cos($this->time * 1.2 + $seed * 0.7) * 0.5;
-                    $x = $playerPos->x + $rx + $wobbleX;
-                    $z = $playerPos->z + $rz + $wobbleZ;
-                    $transform->position = new Vec3($x, $playerPos->y + $y, $z);
-                    $transform->scale = new Vec3(0.04, 0.04, 0.04);
-                } else {
-                    // Settled: flat on ground, scattered around player
-                    $x = $playerPos->x + sin($seed * 1.3) * 12.0;
-                    $z = $playerPos->z + cos($seed * 0.9) * 12.0;
-                    $transform->position = new Vec3($x, $playerPos->y + 0.02, $z);
-                    $transform->scale = new Vec3(0.06, 0.005, 0.06); // flat disc
-                }
+                $wobbleX = sin($this->time * 1.5 + $seed) * 0.5;
+                $wobbleZ = cos($this->time * 1.2 + $seed * 0.7) * 0.5;
+                $x = $playerPos->x + $rx + $wobbleX;
+                $z = $playerPos->z + $rz + $wobbleZ;
+                $transform->position = new Vec3($x, $playerPos->y + max(0.0, $y), $z);
+                $transform->scale = new Vec3(0.04, 0.04, 0.04);
             } elseif ($weather->sandstormIntensity > 0.05) {
                 // Sand: horizontal near ground
                 $y = sin($seed * 0.5) * 1.0 + 0.3;
