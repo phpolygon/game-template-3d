@@ -193,8 +193,8 @@ class FirstPersonCameraSystem extends AbstractSystem
     private function handleWeatherShortcuts(World $world): void
     {
         $atmo = null;
-        foreach ($world->query(\App\Component\Atmosphere::class) as $e) {
-            $atmo = $e->get(\App\Component\Atmosphere::class);
+        foreach ($world->query(\PHPolygon\Component\Atmosphere::class) as $e) {
+            $atmo = $e->get(\PHPolygon\Component\Atmosphere::class);
             break;
         }
 

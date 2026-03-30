@@ -8,7 +8,7 @@ use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
 use PHPolygon\Component\PalmSway;
 use App\Component\WaveStrip;
-use App\Component\Wind;
+use PHPolygon\Component\Wind;
 use App\Scene\PlaygroundScene;
 use PHPUnit\Framework\TestCase;
 use PHPolygon\Component\Camera3DComponent;

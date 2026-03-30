@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\System;
+namespace PHPolygon\System;
 
-use App\Component\Atmosphere;
+use PHPolygon\Component\Atmosphere;
 use PHPolygon\Component\DayNightCycle;
 use PHPolygon\Component\MeshRenderer;
 use PHPolygon\Component\Season;
@@ -73,8 +73,8 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
         foreach ($world->query(Atmosphere::class) as $e) { $atmo = $e->get(Atmosphere::class); break; }
         if ($weather === null) return;
 
-        foreach ($world->query(\App\Component\Wind::class) as $entity) {
-            $wind = $entity->get(\App\Component\Wind::class);
+        foreach ($world->query(\PHPolygon\Component\Wind::class) as $entity) {
+            $wind = $entity->get(\PHPolygon\Component\Wind::class);
 
             // Pressure gradient drives wind base intensity
             // Storm dramatically increases wind (up to 3.5x normal for hurricane-force palm sway)

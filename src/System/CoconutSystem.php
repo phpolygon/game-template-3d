@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\System;
 
 use App\Component\Coconut;
-use App\Component\Wind;
+use PHPolygon\Component\Wind;
 use PHPolygon\Component\BodyType;
 use PHPolygon\Component\BoxCollider3D;
 use PHPolygon\Component\RigidBody3D;

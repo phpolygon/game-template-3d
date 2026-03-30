@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Component;
+namespace PHPolygon\Component;
 
 use PHPolygon\ECS\AbstractComponent;
 use PHPolygon\ECS\Attribute\Category;

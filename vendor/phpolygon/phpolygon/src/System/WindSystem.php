@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\System;
+namespace PHPolygon\System;
 
-use App\Component\Atmosphere;
-use App\Component\Wind;
+use PHPolygon\Component\Atmosphere;
+use PHPolygon\Component\Wind;
 use PHPolygon\ECS\AbstractSystem;
 use PHPolygon\ECS\World;
 use PHPolygon\Math\Vec3;

@@ -6,7 +6,7 @@ namespace App\System;
 
 use App\Audio\WavSynthesizer;
 use App\Component\FirstPersonCamera;
-use App\Component\Wind;
+use PHPolygon\Component\Wind;
 use PHPolygon\Audio\AudioChannel;
 use PHPolygon\Audio\AudioManager;
 use PHPolygon\Component\Transform3D;

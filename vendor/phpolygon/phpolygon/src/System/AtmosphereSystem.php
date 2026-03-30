@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\System;
+namespace PHPolygon\System;
 
-use App\Component\Atmosphere;
+use PHPolygon\Component\Atmosphere;
 use PHPolygon\Component\DayNightCycle;
 use PHPolygon\Component\Season;
 use PHPolygon\Component\Weather;
@@ -266,8 +266,8 @@ class AtmosphereSystem extends AbstractSystem
         // =====================================================================
         if ($weather !== null) {
             $windIntensity = 0.5;
-            foreach ($world->query(\App\Component\Wind::class) as $e) {
-                $windIntensity = $e->get(\App\Component\Wind::class)->intensity;
+            foreach ($world->query(\PHPolygon\Component\Wind::class) as $e) {
+                $windIntensity = $e->get(\PHPolygon\Component\Wind::class)->intensity;
                 break;
             }
 
@@ -285,8 +285,8 @@ class AtmosphereSystem extends AbstractSystem
         // =====================================================================
         if ($weather !== null) {
             $windIntensity = 0.5;
-            foreach ($world->query(\App\Component\Wind::class) as $e) {
-                $windIntensity = $e->get(\App\Component\Wind::class)->intensity;
+            foreach ($world->query(\PHPolygon\Component\Wind::class) as $e) {
+                $windIntensity = $e->get(\PHPolygon\Component\Wind::class)->intensity;
                 break;
             }
             $canSand = $windIntensity > 0.8 && $humidity < 0.3;

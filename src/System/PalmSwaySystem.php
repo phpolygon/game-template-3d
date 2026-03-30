@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\System;
 
 use PHPolygon\Component\PalmSway;
-use App\Component\Wind;
+use PHPolygon\Component\Wind;
 use PHPolygon\Component\Transform3D;
 use PHPolygon\ECS\AbstractSystem;
 use PHPolygon\ECS\World;

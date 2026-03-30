@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\System;
 
 use App\Component\WaveStrip;
-use App\Component\Wind;
+use PHPolygon\Component\Wind;
 use PHPolygon\Component\Transform3D;
 use PHPolygon\Component\Weather;
 use PHPolygon\ECS\AbstractSystem;
