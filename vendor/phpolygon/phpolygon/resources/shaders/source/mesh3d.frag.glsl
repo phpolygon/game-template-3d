@@ -1193,11 +1193,15 @@ void main() {
         // Snow accumulation on upward-facing surfaces
         if (u_snow_coverage > 0.01) {
             float upFacing = max(dot(N, vec3(0.0, 1.0, 0.0)), 0.0);
-            float snowAmt = u_snow_coverage * smoothstep(0.3, 0.8, upFacing);
-            float snowNoise = fbm(v_worldPos.xz * 3.0, 2);
-            snowAmt *= smoothstep(0.3, 0.7, snowNoise);
-            albedo = mix(albedo, vec3(0.95, 0.95, 1.0), snowAmt);
-            roughness = mix(roughness, 0.7, snowAmt);
+            // Snow settles on any surface facing up (>15°)
+            float snowAmt = u_snow_coverage * smoothstep(0.15, 0.5, upFacing);
+            // Patchy coverage via noise — but not too aggressive
+            float snowNoise = fbm(v_worldPos.xz * 2.0, 2);
+            snowAmt *= smoothstep(0.2, 0.5, snowNoise);
+            // Stronger blend — snow is very white and opaque
+            snowAmt = min(1.0, snowAmt * 1.5);
+            albedo = mix(albedo, vec3(0.96, 0.97, 1.0), snowAmt);
+            roughness = mix(roughness, 0.65, snowAmt);
         }
     }
 
