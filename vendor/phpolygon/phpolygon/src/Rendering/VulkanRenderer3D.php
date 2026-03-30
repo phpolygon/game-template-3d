@@ -746,7 +746,7 @@ class VulkanRenderer3D implements Renderer3DInterface
         $this->ensureMacOSVulkanEnv();
 
         // Query GLFW for required Vulkan instance extensions
-        $glfwExtensions = glfwGetRequiredInstanceExtensions();
+        $glfwExtensions = \glfwGetRequiredInstanceExtensions();
         $extensions = is_array($glfwExtensions) ? $glfwExtensions : [];
         // Ensure portability enumeration is included (needed for MoltenVK)
         if (!in_array('VK_KHR_portability_enumeration', $extensions, true)) {
