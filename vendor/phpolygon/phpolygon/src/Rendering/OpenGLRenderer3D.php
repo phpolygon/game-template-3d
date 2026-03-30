@@ -91,7 +91,7 @@ class OpenGLRenderer3D implements Renderer3DInterface
     private ?ShadowMapRenderer $shadowMap = null;
     private ?CloudShadowRenderer $cloudShadow = null;
     private ?PostProcessPipeline $postProcess = null;
-    private bool $postProcessEnabled = false;
+    private bool $postProcessEnabled = true;
 
     public function __construct(int $width = 1280, int $height = 720)
     {

@@ -220,9 +220,11 @@ class Engine
                     }
                 },
                 render: function (float $interpolation) {
-                    $this->renderer2D->beginFrame();
-
+                    // 1. 3D scene render (PostProcess FBO capture + apply inside renderer)
                     $this->world->render();
+
+                    // 2. 2D overlay on top of post-processed scene
+                    $this->renderer2D->beginFrame();
 
                     if ($this->onRender !== null) {
                         ($this->onRender)($this, $interpolation);
@@ -252,9 +254,11 @@ class Engine
                     }
                 },
                 render: function (float $interpolation) {
-                    $this->renderer2D->beginFrame();
-
+                    // 1. 3D scene render (PostProcess FBO capture + apply inside renderer)
                     $this->world->render();
+
+                    // 2. 2D overlay on top of post-processed scene
+                    $this->renderer2D->beginFrame();
 
                     if ($this->onRender !== null) {
                         ($this->onRender)($this, $interpolation);

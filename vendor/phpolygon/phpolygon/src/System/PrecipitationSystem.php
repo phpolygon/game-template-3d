@@ -43,6 +43,13 @@ class PrecipitationSystem extends AbstractSystem
 
         if ($weather === null || $playerPos === null) return;
 
+        // Find terrain heightmap for ground-level clamping
+        $heightmap = null;
+        foreach ($world->query(\PHPolygon\Component\HeightmapCollider3D::class) as $entity) {
+            $heightmap = $entity->get(\PHPolygon\Component\HeightmapCollider3D::class);
+            break;
+        }
+
         $isActive = $weather->rainIntensity > 0.05 || $weather->snowIntensity > 0.05 || $weather->sandstormIntensity > 0.05;
 
         // Update precipitation material based on type
@@ -99,26 +106,32 @@ class PrecipitationSystem extends AbstractSystem
             $rz = cos($seed * 1.7) * 15.0;
 
             if ($weather->rainIntensity > 0.05) {
-                // Rain: fast falling, slight wind drift, disappear at ground
+                // Rain: fast falling, slight wind drift, disappear at terrain
                 $speed = 12.0 + sin($seed * 3.1) * 3.0;
                 $fallCycle = fmod($this->time * $speed + sin($seed) * 10.0, 15.0);
-                $y = max(0.0, 15.0 - $fallCycle);
+                $y = 15.0 - $fallCycle;
                 $x = $playerPos->x + $rx + $windX * ($this->time * 0.5);
                 $z = $playerPos->z + $rz + $windZ * ($this->time * 0.5);
-                $transform->position = new Vec3($x, $playerPos->y + $y, $z);
+                $groundY = $heightmap !== null ? ($heightmap->getHeightAt($x, $z) ?? $playerPos->y) : $playerPos->y;
+                $absY = $playerPos->y + $y;
+                if ($absY < $groundY + 0.01) $absY = $playerPos->y + 15.0; // respawn at top
+                $transform->position = new Vec3($x, $absY, $z);
                 $transform->scale = new Vec3(0.01, 0.15 + $weather->rainIntensity * 0.1, 0.01);
             } elseif ($weather->snowIntensity > 0.05) {
-                // Snow: continuous fall, disappear at ground, respawn at top
+                // Snow: slow fall, disappear at terrain, respawn at top
                 // The actual snow cover is handled by the shader (u_snow_coverage accumulation)
                 $speed = 1.5 + sin($seed * 2.3) * 0.5;
                 $fallCycle = fmod($this->time * $speed + sin($seed) * 8.0, 10.0);
-                $y = 10.0 - $fallCycle; // 10m above player → 0m at feet
+                $y = 10.0 - $fallCycle;
 
                 $wobbleX = sin($this->time * 1.5 + $seed) * 0.5;
                 $wobbleZ = cos($this->time * 1.2 + $seed * 0.7) * 0.5;
                 $x = $playerPos->x + $rx + $wobbleX;
                 $z = $playerPos->z + $rz + $wobbleZ;
-                $transform->position = new Vec3($x, $playerPos->y + max(0.0, $y), $z);
+                $groundY = $heightmap !== null ? ($heightmap->getHeightAt($x, $z) ?? $playerPos->y) : $playerPos->y;
+                $absY = $playerPos->y + $y;
+                if ($absY < $groundY + 0.01) $absY = $playerPos->y + 10.0; // respawn at top
+                $transform->position = new Vec3($x, $absY, $z);
                 $transform->scale = new Vec3(0.04, 0.04, 0.04);
             } elseif ($weather->sandstormIntensity > 0.05) {
                 // Sand: horizontal near ground
