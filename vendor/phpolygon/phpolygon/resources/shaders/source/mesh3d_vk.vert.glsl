@@ -12,7 +12,7 @@ layout(location = 5) in vec4 a_instance_model_col2;
 layout(location = 6) in vec4 a_instance_model_col3;
 
 // Per-frame: view + projection + misc
-layout(binding = 0) uniform FrameUBO {
+layout(set = 0, binding = 0) uniform FrameUBO {
     mat4 u_view;
     mat4 u_projection;
     float u_time;

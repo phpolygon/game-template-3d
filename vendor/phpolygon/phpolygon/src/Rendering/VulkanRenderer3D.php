@@ -197,6 +197,8 @@ class VulkanRenderer3D implements Renderer3DInterface
     private const VK_BUFFER_USAGE_INDEX        = 64;
     private const VK_BUFFER_USAGE_UNIFORM      = 16;
     private const VK_DESCRIPTOR_UNIFORM_BUFFER = 6;
+    private const VK_DESCRIPTOR_COMBINED_IMAGE_SAMPLER = 1;
+    private const VK_IMAGE_USAGE_SAMPLED = 4;
     private const VK_VERTEX_INPUT_RATE_VERTEX  = 0;
     private const VK_VERTEX_INPUT_RATE_INSTANCE = 1;
     private const VK_CULL_MODE_BACK            = 2;
@@ -924,6 +926,7 @@ class VulkanRenderer3D implements Renderer3DInterface
         $this->descriptorSetLayout = new DescriptorSetLayout($this->device, [
             ['binding' => 0, 'descriptorType' => self::VK_DESCRIPTOR_UNIFORM_BUFFER, 'stageFlags' => self::VK_SHADER_STAGE_VERTEX | self::VK_SHADER_STAGE_FRAGMENT],
             ['binding' => 1, 'descriptorType' => self::VK_DESCRIPTOR_UNIFORM_BUFFER, 'stageFlags' => self::VK_SHADER_STAGE_FRAGMENT],
+            // TODO: Add sampler bindings (2, 3, 4) when dummy image layout transitions are implemented
         ]);
 
         $this->pipelineLayout = new PipelineLayout(
@@ -987,9 +990,9 @@ class VulkanRenderer3D implements Renderer3DInterface
 
     private function createDescriptors(): void
     {
-        $this->descriptorPool = new DescriptorPool($this->device, 1,
-            [['type' => self::VK_DESCRIPTOR_UNIFORM_BUFFER, 'count' => 2]],
-        );
+        $this->descriptorPool = new DescriptorPool($this->device, 1, [
+            ['type' => self::VK_DESCRIPTOR_UNIFORM_BUFFER, 'count' => 2],
+        ]);
 
         $rawSets = $this->descriptorPool->allocateSets([$this->descriptorSetLayout]);
         $firstSet = $rawSets[0] ?? null;
@@ -997,6 +1000,8 @@ class VulkanRenderer3D implements Renderer3DInterface
         $this->descriptorSet = $firstSet;
         $this->descriptorSet->writeBuffer(0, $this->frameUbo, 0, self::FRAME_UBO_SIZE, self::VK_DESCRIPTOR_UNIFORM_BUFFER);
         $this->descriptorSet->writeBuffer(1, $this->lightingUbo, 0, self::LIGHTING_UBO_SIZE, self::VK_DESCRIPTOR_UNIFORM_BUFFER);
+
+        // TODO: Shadow/cloud/environment samplers (bindings 2, 3, 4) — need image layout transitions
     }
 
     private function createCommandObjects(): void

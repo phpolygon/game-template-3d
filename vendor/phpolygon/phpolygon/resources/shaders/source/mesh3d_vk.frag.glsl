@@ -20,7 +20,7 @@ struct PointLight {
 
 // Binding 0: Frame UBO (set by vertex shader too)
 // Binding 1: Lighting + Material + Weather UBO
-layout(binding = 1) uniform LightingUBO {
+layout(set = 0, binding = 1) uniform LightingUBO {
     // Ambient
     vec3  u_ambient_color;
     float u_ambient_intensity;
@@ -83,13 +83,13 @@ layout(binding = 1) uniform LightingUBO {
 #define u_dir_light_intensity u_dir_lights[0].intensity
 
 // Binding 2: Shadow map (depth comparison sampler)
-layout(binding = 2) uniform sampler2DShadow u_shadow_map;
+layout(set = 0, binding = 2) uniform sampler2DShadow u_shadow_map;
 
 // Binding 3: Cloud shadow map (R8 opacity)
-layout(binding = 3) uniform sampler2D u_cloud_shadow_map;
+layout(set = 0, binding = 3) uniform sampler2D u_cloud_shadow_map;
 
 // Binding 4: Environment cubemap
-layout(binding = 4) uniform samplerCube u_environment_map;
+layout(set = 0, binding = 4) uniform samplerCube u_environment_map;
 
 layout(location = 0) out vec4 frag_color;
 
