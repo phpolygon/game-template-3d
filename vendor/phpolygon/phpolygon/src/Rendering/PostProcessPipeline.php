@@ -23,7 +23,7 @@ class PostProcessPipeline
     // Effect toggles
     private bool $ssaoEnabled = true;
     private bool $bloomEnabled = true;
-    private bool $godRaysEnabled = false; // Disabled until sun screen-space projection is implemented
+    private bool $godRaysEnabled = true;
     private bool $dofEnabled = false;
     private float $dofFocusDistance = 15.0;
     private float $dofRange = 10.0;
@@ -31,6 +31,11 @@ class PostProcessPipeline
     // Sun data for god rays
     private Vec3 $sunDirection;
     private float $sunIntensity = 1.0;
+
+    /** @var float[] View matrix (16 floats) */
+    private array $viewMatrix = [];
+    /** @var float[] Projection matrix (16 floats) */
+    private array $projMatrix = [];
 
     private const VERT_PATH = __DIR__ . '/../../resources/shaders/source/postprocess.vert.glsl';
     private const FRAG_PATH = __DIR__ . '/../../resources/shaders/source/postprocess.frag.glsl';
@@ -58,6 +63,16 @@ class PostProcessPipeline
     {
         $this->sunDirection = $direction;
         $this->sunIntensity = $intensity;
+    }
+
+    /**
+     * @param float[] $view 16-float view matrix
+     * @param float[] $proj 16-float projection matrix
+     */
+    public function setMatrices(array $view, array $proj): void
+    {
+        $this->viewMatrix = $view;
+        $this->projMatrix = $proj;
     }
 
     public function initialize(): void
@@ -179,6 +194,20 @@ class PostProcessPipeline
         glUniform3f(glGetUniformLocation($this->shaderProgram, 'u_sun_direction'),
             $this->sunDirection->x, $this->sunDirection->y, $this->sunDirection->z);
         glUniform1f(glGetUniformLocation($this->shaderProgram, 'u_sun_intensity'), $this->sunIntensity);
+
+        // View/Projection matrices for sun screen-space projection (god rays)
+        if (!empty($this->viewMatrix)) {
+            $viewLoc = glGetUniformLocation($this->shaderProgram, 'u_view_matrix');
+            if ($viewLoc >= 0) {
+                glUniformMatrix4fv($viewLoc, false, new \GL\Buffer\FloatBuffer($this->viewMatrix));
+            }
+        }
+        if (!empty($this->projMatrix)) {
+            $projLoc = glGetUniformLocation($this->shaderProgram, 'u_proj_matrix');
+            if ($projLoc >= 0) {
+                glUniformMatrix4fv($projLoc, false, new \GL\Buffer\FloatBuffer($this->projMatrix));
+            }
+        }
 
         // Draw fullscreen triangle
         glBindVertexArray($this->vao);

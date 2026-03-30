@@ -10,6 +10,8 @@ uniform float u_sun_intensity;
 uniform float u_time;
 uniform int u_width;
 uniform int u_height;
+uniform mat4 u_view_matrix;
+uniform mat4 u_proj_matrix;
 
 // Post-processing toggles
 uniform int u_enable_ssao;
@@ -90,8 +92,24 @@ vec3 computeBloom(vec2 uv) {
 // ================================================================
 
 vec3 computeGodRays(vec2 uv) {
-    // Project sun position to screen space (approximate)
-    vec2 sunScreen = vec2(0.5, 0.7); // TODO: actual sun screen projection from u_sun_direction
+    // Project sun direction to screen space via view + projection matrices
+    // Sun is a directional light — place it far away in the light direction
+    vec3 sunWorldPos = u_camera_pos - u_sun_direction * 500.0;
+    vec4 sunClip = u_proj_matrix * u_view_matrix * vec4(sunWorldPos, 1.0);
+
+    // Perspective divide → NDC → UV
+    vec2 sunScreen;
+    if (sunClip.w > 0.0) {
+        sunScreen = (sunClip.xy / sunClip.w) * 0.5 + 0.5;
+    } else {
+        // Sun is behind camera — no god rays
+        return vec3(0.0);
+    }
+
+    // If sun is far off screen, reduce effect
+    float offScreen = max(abs(sunScreen.x - 0.5), abs(sunScreen.y - 0.5));
+    if (offScreen > 1.5) return vec3(0.0);
+    float edgeFade = smoothstep(1.5, 0.5, offScreen);
 
     vec2 deltaUV = (uv - sunScreen) * (1.0 / 64.0);
     vec2 sampleUV = uv;
@@ -112,7 +130,7 @@ vec3 computeGodRays(vec2 uv) {
 
     illumination /= 64.0;
     vec3 sunColor = vec3(1.0, 0.9, 0.7) * u_sun_intensity;
-    return sunColor * illumination * 0.3;
+    return sunColor * illumination * 0.2 * edgeFade;
 }
 
 // ================================================================
