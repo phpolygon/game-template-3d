@@ -1171,8 +1171,13 @@ void main() {
     }
 
     // ---- Weather surface effects (wet, snow, dew) ----
-    // Skip water (2), cloud (6), moon (9) — they don't get wet/snowy
-    if (u_proc_mode != 2 && u_proc_mode != 6 && u_proc_mode != 9) {
+    // Skip: water (2), cloud (6), moon (9), fire (14), neon (18), particle (24), hologram (25)
+    // Also skip emission-dominant surfaces (sky domes, glow objects)
+    float emissionStrength = u_emission.r + u_emission.g + u_emission.b;
+    bool isPhysicalSurface = u_proc_mode != 2 && u_proc_mode != 6 && u_proc_mode != 9
+        && u_proc_mode != 14 && u_proc_mode != 18 && u_proc_mode != 24 && u_proc_mode != 25
+        && emissionStrength < 0.5;
+    if (isPhysicalSurface) {
         // Wet surfaces: rain + morning dew
         float wetness = max(u_rain_intensity, u_dew_wetness * 0.6);
         if (wetness > 0.01) {
