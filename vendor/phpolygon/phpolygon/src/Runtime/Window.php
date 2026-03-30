@@ -24,12 +24,13 @@ class Window
     private int $windowedWidth = 0;
     private int $windowedHeight = 0;
 
+    private bool $useVulkan = false;
+
     public function __construct(
         private int $width,
         private int $height,
         private string $title,
         private bool $vsync = true,
-        private bool $useVulkan = false,
         private bool $resizable = true,
     ) {}
 
@@ -39,6 +40,7 @@ class Window
             throw new RuntimeException('Failed to initialize GLFW');
         }
 
+        fprintf(STDERR, "[Window] useVulkan=%s\n", $this->useVulkan ? 'true' : 'false');
         if ($this->useVulkan) {
             // Vulkan: no OpenGL context — MoltenVK provides Metal surface
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);

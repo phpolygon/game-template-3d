@@ -130,6 +130,8 @@ class Engine
             }
         }
         $useVulkan = $config->is3D && $this->resolvedBackend === 'vulkan';
+        fprintf(STDERR, "[Engine] Constructor: backend=%s config=%s useVulkan=%s\n",
+            $this->resolvedBackend, $config->renderBackend3D, $useVulkan ? 'true' : 'false');
 
         if ($this->headless) {
             $this->window = new NullWindow($initW, $initH, $config->title);
@@ -141,7 +143,6 @@ class Engine
                 $config->title,
                 $config->vsync,
                 $config->resizable,
-                $useVulkan,
             );
         }
     }
