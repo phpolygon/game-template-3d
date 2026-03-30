@@ -46,7 +46,7 @@ class Game
             targetTickRate: 60.0,
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
-            renderBackend3D: 'opengl', // TODO: switch to 'auto' when php-glfw supports Vulkan
+            renderBackend3D: 'auto',
         ));
 
         $engine->onInit(function (Engine $engine) {

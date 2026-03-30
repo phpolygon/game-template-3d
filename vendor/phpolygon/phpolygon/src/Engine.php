@@ -72,6 +72,24 @@ class Engine
     ) {
         $this->headless = $config->headless;
 
+        // Ensure Vulkan/MoltenVK libraries are discoverable on macOS
+        // Must happen before glfwInit() so glfwVulkanSupported() can find libvulkan
+        if (PHP_OS_FAMILY === 'Darwin') {
+            foreach (['/opt/homebrew/lib', '/usr/local/lib'] as $libDir) {
+                if (file_exists("{$libDir}/libvulkan.dylib")) {
+                    $existing = getenv('DYLD_LIBRARY_PATH');
+                    if (!$existing || !str_contains($existing, $libDir)) {
+                        putenv("DYLD_LIBRARY_PATH=" . ($existing ? "{$existing}:{$libDir}" : $libDir));
+                    }
+                    $icd = dirname($libDir) . '/etc/vulkan/icd.d/MoltenVK_icd.json';
+                    if (!getenv('VK_ICD_FILENAMES') && file_exists($icd)) {
+                        putenv("VK_ICD_FILENAMES={$icd}");
+                    }
+                    break;
+                }
+            }
+        }
+
         // Use config dimensions as placeholder — resolved after window init if 0
         $initW = max(1, $config->width);
         $initH = max(1, $config->height);
@@ -120,12 +138,12 @@ class Engine
                     $hasVulkanLib = true;
                 }
                 // Also check if GLFW was compiled with Vulkan support
-                // Don't select Vulkan yet — glfwVulkanSupported() needs glfwInit()
-                // which we can't call before Window creation without corrupting GL state.
-                // Stay on OpenGL; Vulkan would need php-glfw rebuilt with --enable-vulkan.
-                if ($hasVulkanLib) {
-                    // Mark as candidate — will be verified in run()
-                    $this->resolvedBackend = 'opengl'; // safe default, Vulkan checked in run()
+                // Check glfwVulkanSupported — safe now that DYLD_LIBRARY_PATH is set by game.php
+                if ($hasVulkanLib && function_exists('glfwInit') && glfwInit()) {
+                    if (function_exists('glfwVulkanSupported') && glfwVulkanSupported()) {
+                        $this->resolvedBackend = 'vulkan';
+                    }
+                    // glfwTerminate not needed — Window::initialize() reuses the init
                 }
             }
         }
@@ -144,6 +162,9 @@ class Engine
                 $config->vsync,
                 $config->resizable,
             );
+            if ($this->resolvedBackend === 'vulkan') {
+                $this->window->setUseVulkan(true);
+            }
         }
     }
 

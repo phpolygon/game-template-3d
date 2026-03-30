@@ -26,6 +26,11 @@ class Window
 
     private bool $useVulkan = false;
 
+    public function setUseVulkan(bool $value): void
+    {
+        $this->useVulkan = $value;
+    }
+
     public function __construct(
         private int $width,
         private int $height,
