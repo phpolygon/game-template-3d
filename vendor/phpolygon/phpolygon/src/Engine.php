@@ -119,7 +119,14 @@ class Engine
                 } else {
                     $hasVulkanLib = true;
                 }
-                if ($hasVulkanLib) $this->resolvedBackend = 'vulkan';
+                // Also check if GLFW was compiled with Vulkan support
+                $glfwVulkan = function_exists('glfwVulkanSupported') && glfwInit() && glfwVulkanSupported();
+                if ($hasVulkanLib && $glfwVulkan) {
+                    $this->resolvedBackend = 'vulkan';
+                } elseif ($hasVulkanLib && !$glfwVulkan) {
+                    fprintf(STDERR, "[Engine] Vulkan library found but GLFW lacks Vulkan support.\n");
+                    fprintf(STDERR, "[Engine] Rebuild php-glfw with Vulkan: phpize && ./configure --enable-vulkan && make\n");
+                }
             }
         }
         $useVulkan = $config->is3D && $this->resolvedBackend === 'vulkan';
