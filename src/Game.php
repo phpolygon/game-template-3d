@@ -46,7 +46,7 @@ class Game
             targetTickRate: 60.0,
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
-            renderBackend3D: 'auto',
+            renderBackend3D: 'opengl', // TODO: switch to 'auto' when php-glfw supports Vulkan
         ));
 
         $engine->onInit(function (Engine $engine) {
@@ -188,7 +188,10 @@ class Game
         }
 
         $r->endFrame();
-        $engine->window->swapBuffers();
+        // Vulkan: no swap buffers (no GL context), present handled by Vulkan renderer
+        if (!($engine->renderer3D instanceof \PHPolygon\Rendering\VulkanRenderer3D)) {
+            $engine->window->swapBuffers();
+        }
         $engine->window->pollEvents();
     }
 }

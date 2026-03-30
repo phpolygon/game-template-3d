@@ -91,7 +91,7 @@ class OpenGLRenderer3D implements Renderer3DInterface
     private ?ShadowMapRenderer $shadowMap = null;
     private ?CloudShadowRenderer $cloudShadow = null;
     private ?PostProcessPipeline $postProcess = null;
-    private bool $postProcessEnabled = true;
+    private bool $postProcessEnabled = false;
     private int $ppDebugCounter = 0;
 
     public function __construct(int $width = 1280, int $height = 720)
@@ -102,9 +102,9 @@ class OpenGLRenderer3D implements Renderer3DInterface
         $this->initSkybox();
         $this->useInstancingLoc = glGetUniformLocation($this->shaderProgram, 'u_use_instancing');
 
-        // Initialize post-processing pipeline
+        // Post-processing pipeline — lazy init on first use
+        // Cannot init here: GL context may not be fully ready in constructor
         $this->postProcess = new PostProcessPipeline($width, $height);
-        $this->postProcess->initialize();
     }
 
     public function setPostProcessEnabled(bool $enabled): void

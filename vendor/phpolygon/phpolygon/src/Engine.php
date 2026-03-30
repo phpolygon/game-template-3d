@@ -120,12 +120,12 @@ class Engine
                     $hasVulkanLib = true;
                 }
                 // Also check if GLFW was compiled with Vulkan support
-                $glfwVulkan = function_exists('glfwVulkanSupported') && glfwInit() && glfwVulkanSupported();
-                if ($hasVulkanLib && $glfwVulkan) {
-                    $this->resolvedBackend = 'vulkan';
-                } elseif ($hasVulkanLib && !$glfwVulkan) {
-                    fprintf(STDERR, "[Engine] Vulkan library found but GLFW lacks Vulkan support.\n");
-                    fprintf(STDERR, "[Engine] Rebuild php-glfw with Vulkan: phpize && ./configure --enable-vulkan && make\n");
+                // Don't select Vulkan yet — glfwVulkanSupported() needs glfwInit()
+                // which we can't call before Window creation without corrupting GL state.
+                // Stay on OpenGL; Vulkan would need php-glfw rebuilt with --enable-vulkan.
+                if ($hasVulkanLib) {
+                    // Mark as candidate — will be verified in run()
+                    $this->resolvedBackend = 'opengl'; // safe default, Vulkan checked in run()
                 }
             }
         }
@@ -176,6 +176,20 @@ class Engine
         // Use framebuffer dimensions for rendering (accounts for HiDPI/Retina scaling)
         $renderWidth = $this->window->getFramebufferWidth() ?: $this->window->getWidth();
         $renderHeight = $this->window->getFramebufferHeight() ?: $this->window->getHeight();
+
+        // Final Vulkan check now that GLFW is initialized
+        if ($this->resolvedBackend === 'vulkan' || ($this->config->renderBackend3D === 'auto' && $this->resolvedBackend === 'opengl')) {
+            if (function_exists('glfwVulkanSupported') && glfwVulkanSupported()) {
+                if (class_exists(\Vk\Instance::class)) {
+                    $this->resolvedBackend = 'vulkan';
+                }
+            } elseif ($this->resolvedBackend === 'vulkan') {
+                // Forced vulkan but GLFW doesn't support it
+                fprintf(STDERR, "[Engine] Vulkan requested but GLFW lacks support. Falling back to OpenGL.\n");
+                fprintf(STDERR, "[Engine] Rebuild php-glfw with Vulkan: phpize && ./configure --enable-vulkan && make\n");
+                $this->resolvedBackend = 'opengl';
+            }
+        }
 
         // Create GPU-backed renderers after window is initialized
         if (!$this->headless && $this->config->is3D) {
