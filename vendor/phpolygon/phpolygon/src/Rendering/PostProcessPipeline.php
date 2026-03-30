@@ -23,7 +23,7 @@ class PostProcessPipeline
     // Effect toggles
     private bool $ssaoEnabled = true;
     private bool $bloomEnabled = true;
-    private bool $godRaysEnabled = true;
+    private bool $godRaysEnabled = false; // Disabled until sun screen-space projection is implemented
     private bool $dofEnabled = false;
     private float $dofFocusDistance = 15.0;
     private float $dofRange = 10.0;
