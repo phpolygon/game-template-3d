@@ -91,7 +91,8 @@ class OpenGLRenderer3D implements Renderer3DInterface
     private ?ShadowMapRenderer $shadowMap = null;
     private ?CloudShadowRenderer $cloudShadow = null;
     private ?PostProcessPipeline $postProcess = null;
-    private bool $postProcessEnabled = false; // TODO: fix viewport/UV mismatch on ultrawide/multi-monitor
+    private bool $postProcessEnabled = true;
+    private int $ppDebugCounter = 0;
 
     public function __construct(int $width = 1280, int $height = 720)
     {
@@ -376,7 +377,14 @@ class OpenGLRenderer3D implements Renderer3DInterface
         }
 
         // Post-processing: apply SSAO, Bloom, God Rays, Tone Mapping and present
+        $this->ppDebugCounter++;
         if ($this->postProcessEnabled && $this->postProcess !== null && $this->postProcess->isInitialized()) {
+            if ($this->ppDebugCounter % 120 === 1) {
+                $curFbo = 0; glGetIntegerv(GL_FRAMEBUFFER_BINDING, $curFbo);
+                $vp = [0,0,0,0]; glGetIntegerv(GL_VIEWPORT, $vp);
+                fprintf(STDERR, "[PP] Before apply: FBO=%d viewport=%dx%d renderer=%dx%d\n",
+                    $curFbo, $vp[2] ?? 0, $vp[3] ?? 0, $this->width, $this->height);
+            }
             // Pass sun data for god rays
             if ($this->dirLightCount > 0) {
                 $dl = $this->dirLights[0];
