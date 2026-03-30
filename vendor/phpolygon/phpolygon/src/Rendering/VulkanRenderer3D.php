@@ -745,12 +745,18 @@ class VulkanRenderer3D implements Renderer3DInterface
     {
         $this->ensureMacOSVulkanEnv();
 
-        // Query GLFW for required Vulkan instance extensions
-        $glfwExtensions = \glfwGetRequiredInstanceExtensions();
-        $extensions = is_array($glfwExtensions) ? $glfwExtensions : [];
-        // Ensure portability enumeration is included (needed for MoltenVK)
-        if (!in_array('VK_KHR_portability_enumeration', $extensions, true)) {
-            $extensions[] = 'VK_KHR_portability_enumeration';
+        // Instance extensions for Vulkan surface creation
+        $extensions = ['VK_KHR_surface', 'VK_KHR_portability_enumeration'];
+        if (PHP_OS_FAMILY === 'Darwin') {
+            // macOS: MoltenVK uses Metal surface
+            $extensions[] = 'VK_EXT_metal_surface';
+            $extensions[] = 'VK_MVK_macos_surface';
+        } elseif (PHP_OS_FAMILY === 'Linux') {
+            $extensions[] = 'VK_KHR_xcb_surface';
+            $extensions[] = 'VK_KHR_xlib_surface';
+            $extensions[] = 'VK_KHR_wayland_surface';
+        } elseif (PHP_OS_FAMILY === 'Windows') {
+            $extensions[] = 'VK_KHR_win32_surface';
         }
 
         fprintf(STDERR, "[Vulkan] Instance extensions: %s\n", implode(', ', $extensions));
