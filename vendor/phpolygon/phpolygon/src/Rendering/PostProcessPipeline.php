@@ -90,6 +90,14 @@ class PostProcessPipeline
         glBindFramebuffer(GL_FRAMEBUFFER, $this->fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, $this->colorTexture, 0);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, $this->depthTexture, 0);
+
+        $status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if ($status !== GL_FRAMEBUFFER_COMPLETE) {
+            fprintf(STDERR, "[PostProcess] FBO INCOMPLETE! Status: 0x%X (size: %dx%d)\n", $status, $this->width, $this->height);
+        } else {
+            fprintf(STDERR, "[PostProcess] FBO OK (%dx%d)\n", $this->width, $this->height);
+        }
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Empty VAO for fullscreen triangle (vertex shader generates positions from gl_VertexID)
@@ -209,18 +217,39 @@ class PostProcessPipeline
         $vert = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource($vert, $vertSrc);
         glCompileShader($vert);
+        $vertOk = 0;
+        glGetShaderiv($vert, GL_COMPILE_STATUS, $vertOk);
+        if (!$vertOk) {
+            $log = glGetShaderInfoLog($vert);
+            fprintf(STDERR, "[PostProcess] Vertex shader compile error:\n%s\n", $log);
+        }
 
         $frag = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource($frag, $fragSrc);
         glCompileShader($frag);
+        $fragOk = 0;
+        glGetShaderiv($frag, GL_COMPILE_STATUS, $fragOk);
+        if (!$fragOk) {
+            $log = glGetShaderInfoLog($frag);
+            fprintf(STDERR, "[PostProcess] Fragment shader compile error:\n%s\n", $log);
+        }
 
         $program = glCreateProgram();
         glAttachShader($program, $vert);
         glAttachShader($program, $frag);
         glLinkProgram($program);
+        $linkOk = 0;
+        glGetProgramiv($program, GL_LINK_STATUS, $linkOk);
+        if (!$linkOk) {
+            $log = glGetProgramInfoLog($program);
+            fprintf(STDERR, "[PostProcess] Shader link error:\n%s\n", $log);
+        }
 
         glDeleteShader($vert);
         glDeleteShader($frag);
+
+        fprintf(STDERR, "[PostProcess] Shader compiled: vert=%s frag=%s link=%s\n",
+            $vertOk ? 'OK' : 'FAIL', $fragOk ? 'OK' : 'FAIL', $linkOk ? 'OK' : 'FAIL');
 
         return $program;
     }
