@@ -52,7 +52,7 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
 
         // 3. Cross-system coupling
         $this->coupleToWind($world);
-        $this->coupleToDayNight($world);
+        $this->coupleToDayNight($world, $dt);
         $this->updateRainbow($world, $dt);
 
         if ($this->debugCounter % 120 === 1) {
@@ -89,7 +89,7 @@ class AtmosphericEnvironmentalSystem extends AbstractSystem
         }
     }
 
-    private function coupleToDayNight(World $world): void
+    private function coupleToDayNight(World $world, float $dt): void
     {
         $season = null;
         $weather = null;
