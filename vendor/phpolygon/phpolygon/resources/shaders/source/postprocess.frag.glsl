@@ -40,8 +40,8 @@ float computeSSAO(vec2 uv) {
     if (depth >= 1.0) return 1.0; // sky
 
     float occlusion = 0.0;
-    float radius = 0.02;
-    int samples = 16;
+    float radius = 0.008; // Smaller radius = finer detail, less graininess
+    int samples = 24;     // More samples = smoother
 
     for (int i = 0; i < samples; i++) {
         float angle = float(i) * 2.399 + hash(uv * float(i + 1)) * 6.28;
@@ -51,13 +51,12 @@ float computeSSAO(vec2 uv) {
         float sampleDepth = texture(u_scene_depth, uv + offset).r;
         float diff = depth - sampleDepth;
 
-        // Only occlude if sample is closer (in front)
-        if (diff > 0.0001 && diff < 0.01) {
-            occlusion += 1.0;
+        if (diff > 0.0001 && diff < 0.005) {
+            occlusion += smoothstep(0.0, 0.005, diff); // Soft falloff
         }
     }
 
-    return 1.0 - (occlusion / float(samples)) * 0.85; // Stronger AO for visible effect
+    return 1.0 - (occlusion / float(samples)) * 0.4; // Subtle AO
 }
 
 // ================================================================
@@ -66,7 +65,7 @@ float computeSSAO(vec2 uv) {
 
 vec3 computeBloom(vec2 uv) {
     vec3 bloom = vec3(0.0);
-    float bloomThreshold = 0.55; // Lower threshold — scene is already gamma-corrected
+    float bloomThreshold = 0.7; // Moderate — only bright highlights bloom
 
     // Sample bright pixels in a star pattern
     vec2 texelSize = 1.0 / vec2(float(u_width), float(u_height));
@@ -83,7 +82,7 @@ vec3 computeBloom(vec2 uv) {
         }
     }
 
-    return bloom * 0.3; // Stronger bloom since input is LDR
+    return bloom * 0.12; // Subtle glow, not overblown
 }
 
 // ================================================================
