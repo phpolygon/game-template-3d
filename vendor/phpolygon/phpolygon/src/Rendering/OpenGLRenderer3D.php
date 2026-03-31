@@ -230,7 +230,16 @@ class OpenGLRenderer3D implements Renderer3DInterface
 
                 $cameraPos = $command->viewMatrix->inverse()->getTranslation();
                 $this->setUniformVec3('u_camera_pos', [$cameraPos->x, $cameraPos->y, $cameraPos->z]);
-
+                static $glLogged = false;
+                if (!$glLogged) {
+                    $glLogged = true;
+                    $p = $command->projectionMatrix->toArray();
+                    $projAspect = abs($p[5]) / $p[0];
+                    $vpAspect = (float)$this->width / (float)$this->height;
+                    fprintf(STDERR, "[GL:aspect] renderer=%dx%d vpAspect=%.4f projAspect=%.4f MATCH=%s\n",
+                        $this->width, $this->height, $vpAspect, $projAspect,
+                        abs($vpAspect - $projAspect) < 0.01 ? 'YES' : '*** NO ***');
+                }
             } elseif ($command instanceof SetAmbientLight) {
                 $this->setUniformVec3('u_ambient_color', [$command->color->r, $command->color->g, $command->color->b]);
                 $this->setUniformFloat('u_ambient_intensity', $command->intensity);
@@ -326,6 +335,9 @@ class OpenGLRenderer3D implements Renderer3DInterface
         // Pass 2a: opaque
         glDepthMask(true);
         glDisable(GL_BLEND);
+        static $glLoggedFrame = 0;
+        $glLoggedFrame++;
+        $glLoggedDraws = 0;
         foreach ($commandList->getCommands() as $command) {
             if ($command instanceof SetWaveAnimation) {
                 $this->setUniformInt('u_vertex_anim', $command->enabled ? 1 : 0);
@@ -335,6 +347,16 @@ class OpenGLRenderer3D implements Renderer3DInterface
             } elseif ($command instanceof DrawMesh) {
                 $mat = MaterialRegistry::get($command->materialId);
                 if ($mat === null || $mat->alpha >= 1.0) {
+                    if ($glLoggedFrame === 1 && $glLoggedDraws < 5) {
+                        $m = $command->modelMatrix->toArray();
+                        fprintf(STDERR, "[GL:draw#%d] mesh=%s mat=%s pos=(%.1f,%.1f,%.1f) scale=(%.2f,%.2f,%.2f)\n",
+                            $glLoggedDraws, $command->meshId, $command->materialId,
+                            $m[12], $m[13], $m[14],
+                            sqrt($m[0]*$m[0]+$m[1]*$m[1]+$m[2]*$m[2]),
+                            sqrt($m[4]*$m[4]+$m[5]*$m[5]+$m[6]*$m[6]),
+                            sqrt($m[8]*$m[8]+$m[9]*$m[9]+$m[10]*$m[10]));
+                        $glLoggedDraws++;
+                    }
                     $this->drawMeshCommand($command->meshId, $command->materialId, $command->modelMatrix);
                 }
             } elseif ($command instanceof DrawMeshInstanced) {

@@ -12,6 +12,8 @@ use App\System\FirstPersonCameraSystem;
 use App\System\FootprintSystem;
 use App\System\PalmSwaySystem;
 use App\System\PlayerBodySystem;
+use PHPolygon\Rendering\MetalRenderer3D;
+use PHPolygon\Rendering\VulkanRenderer3D;
 use PHPolygon\System\InstancedTerrainSystem;
 use App\System\WaveSystem;
 use PHPolygon\System\WindSystem;
@@ -41,8 +43,8 @@ class Game
     {
         $engine = new Engine(new EngineConfig(
             title: 'PHPolygon 3D — Beach',
-            width: 0,
-            height: 0,
+            width: 1280,
+            height: 720,
             targetTickRate: 60.0,
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
@@ -59,11 +61,12 @@ class Game
             $fbH = $engine->window->getFramebufferHeight();
             $scale = $engine->window->getContentScaleX();
 
-            // Detect system info
-            $backend = 'OpenGL 4.1';
-            if ($engine->renderer3D instanceof \PHPolygon\Rendering\VulkanRenderer3D) {
-                $backend = PHP_OS_FAMILY === 'Darwin' ? 'Vulkan 1.0 (MoltenVK → Metal)' : 'Vulkan 1.0';
-            }
+            $backend = match(get_class($engine->renderer3D)) {
+                VulkanRenderer3D::class => PHP_OS_FAMILY === 'Darwin' ? 'Vulkan 1.0 (MoltenVK -> Metal)' : 'Vulkan 1.0',
+                MetalRenderer3D::class => 'Metal',
+                default => 'OpenGL 4.1',
+            };
+
             self::$renderBackendName = $backend;
 
             $sysInfo = [
@@ -78,7 +81,7 @@ class Game
             // =====================================================================
             // STARTUP SCREEN — interactive, wait for click
             // =====================================================================
-            $startClicked = false;
+            $startClicked = true;
             $buttonX = (float)($w / 2 - 120);
             $buttonY = (float)($h / 2 + 80);
             $buttonW = 240.0;

@@ -135,8 +135,17 @@ class VulkanPostProcessPipeline
      * @param callable(array<mixed>): int $findHostMemory
      * @param callable(array<mixed>): int $findDeviceMemory
      */
-    public function initialize(callable $findHostMemory, callable $findDeviceMemory, RenderPass $presentRenderPass): void
-    {
+    /**
+     * @param callable(array<mixed>): int $findHostMemory
+     * @param callable(array<mixed>): int $findDeviceMemory
+     */
+    public function initialize(
+        callable $findHostMemory,
+        callable $findDeviceMemory,
+        RenderPass $presentRenderPass,
+        ?\Vk\CommandPool $commandPool = null,
+        ?\Vk\Queue $queue = null,
+    ): void {
         if ($this->initialized) return;
 
         // HDR color image
@@ -158,6 +167,26 @@ class VulkanPostProcessPipeline
         $this->depthImageMem = new DeviceMemory($this->device, $dSize, $findDeviceMemory($dReq));
         $this->depthImage->bindMemory($this->depthImageMem, 0);
         $this->depthImageView = new ImageView($this->device, $this->depthImage, self::FORMAT_D32, self::ASPECT_DEPTH, 1);
+
+        // MoltenVK requires images to be transitioned before descriptor writes
+        if ($commandPool !== null && $queue !== null) {
+            $rawCmds = $commandPool->allocateBuffers(1, true);
+            $oneShot = $rawCmds[0] ?? null;
+            if ($oneShot instanceof \Vk\CommandBuffer) {
+                $oneShot->begin(1); // VK_CMD_ONE_TIME_SUBMIT
+                $oneShot->imageMemoryBarrier(
+                    $this->colorImage, 0, self::LAYOUT_SHADER_READ,
+                    0, 0x00000020, 1, 128, self::ASPECT_COLOR,
+                );
+                $oneShot->imageMemoryBarrier(
+                    $this->depthImage, 0, self::LAYOUT_SHADER_READ,
+                    0, 0x00000020, 1, 128, self::ASPECT_DEPTH,
+                );
+                $oneShot->end();
+                $queue->submit([$oneShot], null, [], []);
+                $this->device->waitIdle();
+            }
+        }
 
         // Samplers
         $this->colorSampler = new Sampler($this->device, [
@@ -235,15 +264,19 @@ class VulkanPostProcessPipeline
         $this->postDescriptorSet = $set;
 
         // Write descriptors
-        $this->postDescriptorSet->writeCombinedImageSampler(
-            0, $this->colorSampler, $this->colorImageView, self::LAYOUT_SHADER_READ,
+        fprintf(STDERR, "[PostProcess] writeImage binding 0 (color)...\n");
+        $this->postDescriptorSet->writeImage(
+            0, $this->colorImageView, $this->colorSampler, self::LAYOUT_SHADER_READ,
         );
-        $this->postDescriptorSet->writeCombinedImageSampler(
-            1, $this->depthSampler, $this->depthImageView, self::LAYOUT_SHADER_READ,
+        fprintf(STDERR, "[PostProcess] writeImage binding 1 (depth)...\n");
+        $this->postDescriptorSet->writeImage(
+            1, $this->depthImageView, $this->depthSampler, self::LAYOUT_SHADER_READ,
         );
+        fprintf(STDERR, "[PostProcess] writeBuffer binding 2 (UBO)...\n");
         $this->postDescriptorSet->writeBuffer(
             2, $this->postUbo, 0, self::POST_UBO_SIZE, self::VK_DESCRIPTOR_UNIFORM_BUFFER,
         );
+        fprintf(STDERR, "[PostProcess] descriptors done!\n");
 
         // Post-process pipeline
         $this->postPipelineLayout = new PipelineLayout($this->device, [$this->postDescriptorLayout], []);

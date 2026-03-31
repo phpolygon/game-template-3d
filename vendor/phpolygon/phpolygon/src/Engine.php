@@ -14,6 +14,7 @@ use PHPolygon\Rendering\NullRenderer2D;
 use PHPolygon\Rendering\NullRenderer3D;
 use PHPolygon\Rendering\OpenGLRenderer3D;
 use PHPolygon\Rendering\VulkanRenderer3D;
+use PHPolygon\Rendering\MetalRenderer3D;
 use PHPolygon\Rendering\Renderer2D;
 use PHPolygon\Rendering\Renderer2DInterface;
 use PHPolygon\Rendering\RenderCommandList;
@@ -128,7 +129,14 @@ class Engine
         $this->resolvedBackend = $config->renderBackend3D;
         if ($config->is3D && $this->resolvedBackend === 'auto' && !$this->headless) {
             $this->resolvedBackend = 'opengl';
-            if (class_exists(\Vk\Instance::class)) {
+
+            // Prefer native Metal on macOS when php-metal is available
+            if (PHP_OS_FAMILY === 'Darwin'
+                && class_exists(\Metal\Device::class)
+                && function_exists('glfwGetCocoaWindow')
+            ) {
+                $this->resolvedBackend = 'metal';
+            } elseif (class_exists(\Vk\Instance::class)) {
                 $hasVulkanLib = false;
                 if (PHP_OS_FAMILY === 'Darwin') {
                     foreach (['/opt/homebrew/lib', '/usr/local/lib'] as $dir) {
@@ -137,19 +145,16 @@ class Engine
                 } else {
                     $hasVulkanLib = true;
                 }
-                // Also check if GLFW was compiled with Vulkan support
-                // Check glfwVulkanSupported — safe now that DYLD_LIBRARY_PATH is set by game.php
                 if ($hasVulkanLib && function_exists('glfwInit') && glfwInit()) {
                     if (function_exists('glfwVulkanSupported') && glfwVulkanSupported()) {
                         $this->resolvedBackend = 'vulkan';
                     }
-                    // glfwTerminate not needed — Window::initialize() reuses the init
                 }
             }
         }
-        $useVulkan = $config->is3D && $this->resolvedBackend === 'vulkan';
-        fprintf(STDERR, "[Engine] Constructor: backend=%s config=%s useVulkan=%s\n",
-            $this->resolvedBackend, $config->renderBackend3D, $useVulkan ? 'true' : 'false');
+        $noGLContext = $config->is3D && in_array($this->resolvedBackend, ['vulkan', 'metal'], true);
+        fprintf(STDERR, "[Engine] Constructor: backend=%s config=%s noGLContext=%s\n",
+            $this->resolvedBackend, $config->renderBackend3D, $noGLContext ? 'true' : 'false');
 
         if ($this->headless) {
             $this->window = new NullWindow($initW, $initH, $config->title);
@@ -162,8 +167,8 @@ class Engine
                 $config->vsync,
                 $config->resizable,
             );
-            if ($this->resolvedBackend === 'vulkan') {
-                $this->window->setUseVulkan(true);
+            if ($noGLContext) {
+                $this->window->setUseVulkan(true); // Both Vulkan and Metal need GLFW_NO_API
             }
         }
     }
@@ -198,6 +203,10 @@ class Engine
         // Use framebuffer dimensions for rendering (accounts for HiDPI/Retina scaling)
         $renderWidth = $this->window->getFramebufferWidth() ?: $this->window->getWidth();
         $renderHeight = $this->window->getFramebufferHeight() ?: $this->window->getHeight();
+        fprintf(STDERR, "[Engine] Window: %dx%d  Framebuffer: %dx%d  Render: %dx%d\n",
+            $this->window->getWidth(), $this->window->getHeight(),
+            $this->window->getFramebufferWidth(), $this->window->getFramebufferHeight(),
+            $renderWidth, $renderHeight);
 
         // Final Vulkan check now that GLFW is initialized
         if ($this->resolvedBackend === 'vulkan' || ($this->config->renderBackend3D === 'auto' && $this->resolvedBackend === 'opengl')) {
@@ -218,6 +227,11 @@ class Engine
             fprintf(STDERR, "[Engine] Render backend: %s\n", $this->resolvedBackend);
 
             $this->renderer3D = match ($this->resolvedBackend) {
+                'metal' => new MetalRenderer3D(
+                    $renderWidth,
+                    $renderHeight,
+                    $this->window->getHandle(),
+                ),
                 'vulkan' => new VulkanRenderer3D(
                     $renderWidth,
                     $renderHeight,
@@ -229,7 +243,9 @@ class Engine
 
         // Create Renderer2D after window is initialized (needs GL context)
         // When using Vulkan, NanoVG is unavailable — use NullRenderer2D
-        if (!$this->headless && $this->resolvedBackend !== 'vulkan') {
+        $needsExplicitFrames = in_array($this->resolvedBackend, ['vulkan', 'metal'], true);
+
+        if (!$this->headless && !$needsExplicitFrames) {
             $this->renderer2D = new Renderer2D($this->window);
 
             // Auto-load bundled fonts so text renders without manual setup
@@ -239,8 +255,8 @@ class Engine
                 $this->renderer2D->loadFont('semibold', $fontDir . '/Inter-SemiBold.ttf');
                 $this->renderer2D->setFont('regular');
             }
-        } elseif (!$this->headless && $this->resolvedBackend === 'vulkan') {
-            // Vulkan: no OpenGL context for NanoVG — use null 2D renderer
+        } elseif (!$this->headless && $needsExplicitFrames) {
+            // Vulkan/Metal: no OpenGL context for NanoVG — use null 2D renderer
             $this->renderer2D = new NullRenderer2D($renderWidth, $renderHeight);
         }
 
@@ -267,21 +283,25 @@ class Engine
                         ($this->onUpdate)($this, $dt);
                     }
                 },
-                render: function (float $interpolation) {
-                    // Vulkan: explicit begin/end frame for command buffer management
-                    if ($this->renderer3D !== null && $this->resolvedBackend === 'vulkan') {
+                render: function (float $interpolation) use ($needsExplicitFrames) {
+                    // Vulkan/Metal: explicit begin/end frame for command buffer management
+                    if ($this->renderer3D !== null && $needsExplicitFrames) {
                         $this->renderer3D->beginFrame();
+                        $activeScene = $this->scenes->getActiveScene();
+                        if ($activeScene !== null) {
+                            $this->renderer3D->clear($activeScene->getConfig()->clearColor);
+                        }
                     }
 
                     // 1. 3D scene render (PostProcess FBO capture + apply inside renderer)
                     $this->world->render();
 
-                    // Vulkan: end frame (submit + present)
-                    if ($this->renderer3D !== null && $this->resolvedBackend === 'vulkan') {
+                    // Vulkan/Metal: end frame (submit + present)
+                    if ($this->renderer3D !== null && $needsExplicitFrames) {
                         $this->renderer3D->endFrame();
                     }
 
-                    // 2. 2D overlay on top of post-processed scene (NanoVG, or no-op for Vulkan)
+                    // 2. 2D overlay on top of post-processed scene (NanoVG, or no-op for Vulkan/Metal)
                     $this->renderer2D->beginFrame();
 
                     if ($this->onRender !== null) {
@@ -290,8 +310,8 @@ class Engine
 
                     $this->renderer2D->endFrame();
 
-                    // OpenGL: swap buffers via GLFW. Vulkan: already presented in endFrame()
-                    if ($this->resolvedBackend !== 'vulkan') {
+                    // OpenGL: swap buffers via GLFW. Vulkan/Metal: already presented in endFrame()
+                    if (!$needsExplicitFrames) {
                         $this->window->swapBuffers();
                     }
 
@@ -315,21 +335,25 @@ class Engine
                         ($this->onUpdate)($this, $dt);
                     }
                 },
-                render: function (float $interpolation) {
-                    // Vulkan: explicit begin/end frame for command buffer management
-                    if ($this->renderer3D !== null && $this->resolvedBackend === 'vulkan') {
+                render: function (float $interpolation) use ($needsExplicitFrames) {
+                    // Vulkan/Metal: explicit begin/end frame for command buffer management
+                    if ($this->renderer3D !== null && $needsExplicitFrames) {
                         $this->renderer3D->beginFrame();
+                        $activeScene = $this->scenes->getActiveScene();
+                        if ($activeScene !== null) {
+                            $this->renderer3D->clear($activeScene->getConfig()->clearColor);
+                        }
                     }
 
                     // 1. 3D scene render (PostProcess FBO capture + apply inside renderer)
                     $this->world->render();
 
-                    // Vulkan: end frame (submit + present)
-                    if ($this->renderer3D !== null && $this->resolvedBackend === 'vulkan') {
+                    // Vulkan/Metal: end frame (submit + present)
+                    if ($this->renderer3D !== null && $needsExplicitFrames) {
                         $this->renderer3D->endFrame();
                     }
 
-                    // 2. 2D overlay on top of post-processed scene (NanoVG, or no-op for Vulkan)
+                    // 2. 2D overlay on top of post-processed scene (NanoVG, or no-op for Vulkan/Metal)
                     $this->renderer2D->beginFrame();
 
                     if ($this->onRender !== null) {
@@ -338,8 +362,8 @@ class Engine
 
                     $this->renderer2D->endFrame();
 
-                    // OpenGL: swap buffers via GLFW. Vulkan: already presented in endFrame()
-                    if ($this->resolvedBackend !== 'vulkan') {
+                    // OpenGL: swap buffers via GLFW. Vulkan/Metal: already presented in endFrame()
+                    if (!$needsExplicitFrames) {
                         $this->window->swapBuffers();
                     }
 

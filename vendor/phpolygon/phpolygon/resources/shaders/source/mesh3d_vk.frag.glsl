@@ -19,21 +19,16 @@ struct PointLight {
 };
 
 // Binding 0: Frame UBO (set by vertex shader too)
-// Binding 1: Lighting + Material + Weather UBO
+// Binding 1: Lighting + Weather UBO (material moved to push constants)
 layout(set = 0, binding = 1) uniform LightingUBO {
     // Ambient
     vec3  u_ambient_color;
     float u_ambient_intensity;
 
-    // Material
-    vec3  u_albedo;
-    float u_roughness;
-    vec3  u_emission;
-    float u_metallic;
-    float u_alpha;
-    float u_time;
-    int   u_proc_mode;
-    float u_moon_phase;
+    // Material padding — per-draw data moved to push constants
+    vec4  _mat_pad0;
+    vec4  _mat_pad1;
+    vec4  _mat_pad2;
 
     // Fog
     vec3  u_fog_color;
@@ -46,7 +41,7 @@ layout(set = 0, binding = 1) uniform LightingUBO {
     int   u_has_environment_map;
     vec3  u_horizon_color;
     int   u_has_shadow_map;
-    vec3  u_season_tint;
+    vec3  _ubo_season_pad;
     int   u_has_cloud_shadow;
 
     // Weather
@@ -82,14 +77,25 @@ layout(set = 0, binding = 1) uniform LightingUBO {
 #define u_dir_light_color u_dir_lights[0].color
 #define u_dir_light_intensity u_dir_lights[0].intensity
 
-// Binding 2: Shadow map (depth comparison sampler)
+// Per-draw material data via push constants (offset 64, after vertex model matrix)
+layout(push_constant) uniform PC {
+    layout(offset = 64) vec3 u_albedo;
+    float u_roughness;
+    vec3 u_emission;
+    float u_metallic;
+    float u_alpha;
+    int u_proc_mode;
+    float u_moon_phase;
+    float u_time;
+    vec3 u_season_tint;
+    float _pc_pad;
+};
+
+// Shadow + cloud shadow samplers
 layout(set = 0, binding = 2) uniform sampler2DShadow u_shadow_map;
-
-// Binding 3: Cloud shadow map (R8 opacity)
 layout(set = 0, binding = 3) uniform sampler2D u_cloud_shadow_map;
-
-// Binding 4: Environment cubemap
-layout(set = 0, binding = 4) uniform samplerCube u_environment_map;
+// Binding 4 (cubemap) deferred — php-vulkan Image lacks arrayLayers for cube faces
+// layout(set = 0, binding = 4) uniform samplerCube u_environment_map;
 
 layout(location = 0) out vec4 frag_color;
 
@@ -152,45 +158,34 @@ float calcShadow(vec3 worldPos) {
 
     float shadow = 1.0;
 
-    // Geometry shadow (depth-based, PCF 3×3)
+    // PCF 3×3 geometry shadow
     if (u_has_shadow_map == 1) {
-        float geomShadow = 0.0;
-        float texelSize = 1.0 / 2048.0;
         float bias = 0.002;
-        float refDepth = projCoords.z - bias;
-
+        float pcfShadow = 0.0;
+        vec2 texelSize = 1.0 / vec2(textureSize(u_shadow_map, 0));
         for (int x = -1; x <= 1; x++) {
             for (int y = -1; y <= 1; y++) {
                 vec2 offset = vec2(float(x), float(y)) * texelSize;
-                geomShadow += texture(u_shadow_map, vec3(projCoords.xy + offset, refDepth));
+                pcfShadow += texture(u_shadow_map, vec3(projCoords.xy + offset, projCoords.z - bias));
             }
         }
-        geomShadow /= 9.0;
-        shadow *= geomShadow;
+        shadow = pcfShadow / 9.0;
     }
 
-    // Cloud shadow (opacity-based, wide soft blur for realistic cloud penumbra)
+    // Cloud shadow: soft opacity overlay
     if (u_has_cloud_shadow == 1) {
-        float cloudShadow = 0.0;
-        float cloudTexelSize = 1.0 / 1024.0;
-
-        // Large 5×5 Gaussian-weighted blur for soft cloud shadow edges
-        // Weights: center=4, adjacent=2, diagonal=1 (total 48)
-        float weights[5] = float[](1.0, 2.0, 4.0, 2.0, 1.0);
-        float totalWeight = 0.0;
+        float cloudOpacity = 0.0;
+        vec2 texelSize = 1.0 / vec2(textureSize(u_cloud_shadow_map, 0));
+        // 5×5 Gaussian-weighted blur for soft cloud shadows
+        float weights[5] = float[](0.06136, 0.24477, 0.38774, 0.24477, 0.06136);
         for (int x = -2; x <= 2; x++) {
             for (int y = -2; y <= 2; y++) {
-                float w = weights[x + 2] * weights[y + 2];
-                vec2 offset = vec2(float(x), float(y)) * cloudTexelSize * 3.0; // 3× spread for wider blur
-                float cloudAlpha = texture(u_cloud_shadow_map, projCoords.xy + offset).r;
-                cloudShadow += cloudAlpha * w;
-                totalWeight += w;
+                vec2 offset = vec2(float(x), float(y)) * texelSize * 2.0;
+                float s = texture(u_cloud_shadow_map, projCoords.xy + offset).r;
+                cloudOpacity += s * weights[x + 2] * weights[y + 2];
             }
         }
-        cloudShadow /= totalWeight;
-
-        // Cloud opacity attenuates sunlight (0 = fully blocked, 1 = no cloud)
-        shadow *= (1.0 - cloudShadow * 0.7); // Clouds don't block 100% — some light scatters through
+        shadow *= 1.0 - cloudOpacity * 0.6;
     }
 
     return shadow;
@@ -346,7 +341,9 @@ vec3 computeWater(vec3 N, vec3 V, vec3 L, out float alphaOut, out float roughOut
     vec3 R = reflect(-V, N);
     vec3 reflectColor;
     if (u_has_environment_map == 1) {
-        reflectColor = texture(u_environment_map, R).rgb;
+        // Cubemap binding 4 not yet available — use sky/horizon blend
+        float skyBlend = clamp(R.y * 2.0, 0.0, 1.0);
+        reflectColor = mix(u_horizon_color, u_sky_color, skyBlend);
     } else {
         // Blend between horizon (low R.y) and sky (high R.y) based on reflection direction
         float skyBlend = clamp(R.y * 2.0, 0.0, 1.0);

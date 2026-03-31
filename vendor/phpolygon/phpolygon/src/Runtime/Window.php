@@ -135,8 +135,12 @@ class Window
     {
         glfwMaximizeWindow($this->handle);
 
-        // GLFW needs a poll cycle to process the maximize
-        glfwPollEvents();
+        // macOS with GLFW_NO_API needs multiple poll cycles for the window manager
+        // to process the maximize — single poll often returns stale dimensions
+        for ($i = 0; $i < 5; $i++) {
+            glfwPollEvents();
+            usleep(20_000); // 20ms per cycle
+        }
 
         // Read back actual window size after maximize
         $newW = 0; $newH = 0;
@@ -155,6 +159,11 @@ class Window
         glfwGetWindowContentScale($this->handle, $csX, $csY);
         $this->contentScaleX = is_float($csX) ? $csX : 1.0;
         $this->contentScaleY = is_float($csY) ? $csY : 1.0;
+
+        fprintf(STDERR, "[Window] detectAndResize: window=%dx%d fb=%dx%d scale=%.1f\n",
+            $this->width, $this->height,
+            $this->framebufferWidth, $this->framebufferHeight,
+            $this->contentScaleX);
 
         return ['width' => $this->width, 'height' => $this->height];
     }
