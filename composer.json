@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": ">=8.2",
-        "phpolygon/phpolygon": "dev-main"
+        "phpolygon/phpolygon": "@dev"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.0"
@@ -21,7 +21,7 @@
         }
     },
     "repositories": [
-        { "type": "vcs", "url": "https://github.com/phpolygon/phpolygon" }
+        { "type": "path", "url": "/Users/hendrikmennen/Projekte/phpolygon", "options": { "symlink": true } }
     ],
     "minimum-stability": "dev",
     "prefer-stable": true

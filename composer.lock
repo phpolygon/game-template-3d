@@ -4,25 +4,18 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "54aeaa5882d228323b2148c8573cba93",
+    "content-hash": "e2657504f124acd343e3c9f06912a6fd",
     "packages": [
         {
             "name": "phpolygon/phpolygon",
             "version": "dev-main",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/phpolygon/phpolygon.git",
-                "reference": "b0077313d050c9ecb1616c99e81467290d6bdbc4"
-            },
             "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/phpolygon/phpolygon/zipball/b0077313d050c9ecb1616c99e81467290d6bdbc4",
-                "reference": "b0077313d050c9ecb1616c99e81467290d6bdbc4",
-                "shasum": ""
+                "type": "path",
+                "url": "/Users/hendrikmennen/Projekte/phpolygon",
+                "reference": "73f80b0b4bfa271515bf83ad03abe0a6bdc5c57d"
             },
             "require": {
                 "ext-glfw": "*",
-                "ext-vulkan": "*",
                 "php": ">=8.2"
             },
             "require-dev": {
@@ -31,10 +24,11 @@
             },
             "suggest": {
                 "ext-ffi": "Alternative GPU binding mechanism (not used for frame-critical calls)",
-                "ext-gd": "Required for logo/image generation tools",
-                "ext-parallel": "Required for multithreading support (ZTS build)"
+                "ext-gd": "Required for visual regression testing (GdRenderer2D) and logo/image generation",
+                "ext-metal": "Metal 3D backend, macOS only (renderBackend3D: 'metal') — install via PIE: pie install hmennen90/php-metal-gpu:@dev",
+                "ext-parallel": "Required for multithreading support (ZTS build)",
+                "ext-vulkan": "Vulkan 3D backend (renderBackend3D: 'vulkan') — install via PIE: pie install hmennen90/php-vulkan"
             },
-            "default-branch": true,
             "bin": [
                 "bin/phpolygon"
             ],
@@ -53,11 +47,10 @@
                 "MIT"
             ],
             "description": "PHP-native game engine with AI-first authoring",
-            "support": {
-                "source": "https://github.com/phpolygon/phpolygon/tree/main",
-                "issues": "https://github.com/phpolygon/phpolygon/issues"
-            },
-            "time": "2026-03-28T16:46:38+00:00"
+            "transport-options": {
+                "symlink": true,
+                "relative": false
+            }
         }
     ],
     "packages-dev": [
