@@ -50,12 +50,12 @@ class FirstPersonCameraSystem extends AbstractSystem
             }
 
             // Escape releases mouse, left click re-captures
-            if ($this->input->isKeyPressed(GLFW_KEY_ESCAPE)) {
+            if ($this->input->isKeyPressed(VIO_KEY_ESCAPE)) {
                 $this->cursorCaptured = false;
                 $this->firstMouse = true;
                 $this->window->setCursorNormal();
             }
-            if (!$this->cursorCaptured && $this->input->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+            if (!$this->cursorCaptured && $this->input->isMouseButtonPressed(VIO_MOUSE_LEFT)) {
                 $this->cursorCaptured = true;
                 $this->firstMouse = true;
                 $this->window->setCursorDisabled();
@@ -120,16 +120,16 @@ class FirstPersonCameraSystem extends AbstractSystem
             }
 
             $move = Vec3::zero();
-            if ($this->input->isKeyDown(GLFW_KEY_W)) {
+            if ($this->input->isKeyDown(VIO_KEY_W)) {
                 $move = $move->add($forward);
             }
-            if ($this->input->isKeyDown(GLFW_KEY_S)) {
+            if ($this->input->isKeyDown(VIO_KEY_S)) {
                 $move = $move->sub($forward);
             }
-            if ($this->input->isKeyDown(GLFW_KEY_D)) {
+            if ($this->input->isKeyDown(VIO_KEY_D)) {
                 $move = $move->add($right);
             }
-            if ($this->input->isKeyDown(GLFW_KEY_A)) {
+            if ($this->input->isKeyDown(VIO_KEY_A)) {
                 $move = $move->sub($right);
             }
 
@@ -155,10 +155,10 @@ class FirstPersonCameraSystem extends AbstractSystem
                     // Base buoyancy: counteract gravity (9.81) + push toward surface
                     $buoyancy = 9.81 + $depthBelowSurface * self::BUOYANCY_FORCE;
 
-                    if ($this->input->isKeyDown(GLFW_KEY_SPACE)) {
+                    if ($this->input->isKeyDown(VIO_KEY_SPACE)) {
                         $buoyancy += self::BUOYANCY_FORCE;
                     }
-                    if ($this->input->isKeyDown(GLFW_KEY_LEFT_SHIFT)) {
+                    if ($this->input->isKeyDown(VIO_KEY_LEFT_SHIFT)) {
                         $buoyancy -= self::BUOYANCY_FORCE * 1.5; // dive down
                     }
 
@@ -170,7 +170,7 @@ class FirstPersonCameraSystem extends AbstractSystem
                     );
                 } else {
                     // Land: normal jump
-                    if ($controller->isGrounded && $this->input->isKeyPressed(GLFW_KEY_SPACE)) {
+                    if ($controller->isGrounded && $this->input->isKeyPressed(VIO_KEY_SPACE)) {
                         $controller->velocity = new Vec3(
                             $controller->velocity->x,
                             self::JUMP_FORCE,
@@ -203,7 +203,7 @@ class FirstPersonCameraSystem extends AbstractSystem
             $forced = false;
 
             // 1 = Clear sky
-            if ($this->input->isKeyPressed(GLFW_KEY_1)) {
+            if ($this->input->isKeyPressed(VIO_KEY_1)) {
                 $weather->cloudCoverage = 0.1;
                 $weather->humidity = 0.3;
                 $weather->rainIntensity = 0.0;
@@ -214,7 +214,7 @@ class FirstPersonCameraSystem extends AbstractSystem
                 fprintf(STDERR, "[Weather] Forced: CLEAR\n");
             }
             // 2 = Cloudy
-            if ($this->input->isKeyPressed(GLFW_KEY_2)) {
+            if ($this->input->isKeyPressed(VIO_KEY_2)) {
                 $weather->cloudCoverage = 0.7;
                 $weather->humidity = 0.6;
                 $weather->rainIntensity = 0.0;
@@ -224,7 +224,7 @@ class FirstPersonCameraSystem extends AbstractSystem
                 fprintf(STDERR, "[Weather] Forced: CLOUDY\n");
             }
             // 3 = Rain
-            if ($this->input->isKeyPressed(GLFW_KEY_3)) {
+            if ($this->input->isKeyPressed(VIO_KEY_3)) {
                 $weather->cloudCoverage = 0.85;
                 $weather->humidity = 0.8;
                 $weather->rainIntensity = 0.7;
@@ -235,7 +235,7 @@ class FirstPersonCameraSystem extends AbstractSystem
                 fprintf(STDERR, "[Weather] Forced: RAIN\n");
             }
             // 4 = Storm
-            if ($this->input->isKeyPressed(GLFW_KEY_4)) {
+            if ($this->input->isKeyPressed(VIO_KEY_4)) {
                 $weather->cloudCoverage = 0.95;
                 $weather->humidity = 0.9;
                 $weather->rainIntensity = 0.9;
@@ -246,7 +246,7 @@ class FirstPersonCameraSystem extends AbstractSystem
                 fprintf(STDERR, "[Weather] Forced: STORM\n");
             }
             // 5 = Snow
-            if ($this->input->isKeyPressed(GLFW_KEY_5)) {
+            if ($this->input->isKeyPressed(VIO_KEY_5)) {
                 $weather->cloudCoverage = 0.8;
                 $weather->humidity = 0.75;
                 $weather->snowIntensity = 0.6;
@@ -258,7 +258,7 @@ class FirstPersonCameraSystem extends AbstractSystem
                 fprintf(STDERR, "[Weather] Forced: SNOW\n");
             }
             // 6 = Fog
-            if ($this->input->isKeyPressed(GLFW_KEY_6)) {
+            if ($this->input->isKeyPressed(VIO_KEY_6)) {
                 $weather->cloudCoverage = 0.4;
                 $weather->humidity = 0.9;
                 $weather->fogDensity = 0.8;

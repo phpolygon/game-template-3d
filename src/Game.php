@@ -12,8 +12,6 @@ use App\System\FirstPersonCameraSystem;
 use App\System\FootprintSystem;
 use App\System\PalmSwaySystem;
 use App\System\PlayerBodySystem;
-use PHPolygon\Rendering\MetalRenderer3D;
-use PHPolygon\Rendering\VulkanRenderer3D;
 use PHPolygon\System\InstancedTerrainSystem;
 use App\System\WaveSystem;
 use PHPolygon\System\WindSystem;
@@ -49,6 +47,7 @@ class Game
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
             renderBackend3D: 'auto',
+            vioBackend: 'd3d11',
         ));
 
         $engine->onInit(function (Engine $engine) {
@@ -61,11 +60,7 @@ class Game
             $fbH = $engine->window->getFramebufferHeight();
             $scale = $engine->window->getContentScaleX();
 
-            $backend = match(get_class($engine->renderer3D)) {
-                VulkanRenderer3D::class => PHP_OS_FAMILY === 'Darwin' ? 'Vulkan 1.0 (MoltenVK -> Metal)' : 'Vulkan 1.0',
-                MetalRenderer3D::class => 'Metal',
-                default => 'OpenGL 4.1',
-            };
+            $backend = $engine->buildRendererInfo();
 
             self::$renderBackendName = $backend;
 
@@ -97,7 +92,7 @@ class Game
                 $hover = $mx >= $buttonX && $mx <= $buttonX + $buttonW
                       && $my >= $buttonY && $my <= $buttonY + $buttonH;
 
-                if ($hover && $engine->input->isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+                if ($hover && $engine->input->isMouseButtonPressed(VIO_MOUSE_LEFT)) {
                     $startClicked = true;
                 }
 

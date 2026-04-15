@@ -21,7 +21,7 @@
         }
     },
     "repositories": [
-        { "type": "path", "url": "/Users/hendrikmennen/Projekte/phpolygon", "options": { "symlink": true } }
+        { "type": "path", "url": "D:/PhpstormProjects/phpolygon/phpolygon", "options": { "symlink": true } }
     ],
     "minimum-stability": "dev",
     "prefer-stable": true

@@ -4,18 +4,18 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e2657504f124acd343e3c9f06912a6fd",
+    "content-hash": "e479e3e4abd8c64254083aba7fb2e838",
     "packages": [
         {
             "name": "phpolygon/phpolygon",
-            "version": "dev-main",
+            "version": "v0.12.2",
             "dist": {
                 "type": "path",
-                "url": "/Users/hendrikmennen/Projekte/phpolygon",
-                "reference": "73f80b0b4bfa271515bf83ad03abe0a6bdc5c57d"
+                "url": "D:/PhpstormProjects/phpolygon/phpolygon",
+                "reference": "a30e0ee86d1640b3d6c01c1dfd81d2b876aa99c8"
             },
             "require": {
-                "ext-glfw": "*",
+                "ext-vio": "*",
                 "php": ">=8.2"
             },
             "require-dev": {
@@ -25,9 +25,10 @@
             "suggest": {
                 "ext-ffi": "Alternative GPU binding mechanism (not used for frame-critical calls)",
                 "ext-gd": "Required for visual regression testing (GdRenderer2D) and logo/image generation",
-                "ext-metal": "Metal 3D backend, macOS only (renderBackend3D: 'metal') — install via PIE: pie install hmennen90/php-metal-gpu:@dev",
+                "ext-glfw": "OpenGL backend (legacy) - required when using Renderer2D/OpenGLRenderer3D/Window/Input",
+                "ext-metal": "Metal 3D backend, macOS only (renderBackend3D: 'metal') - install via PIE: pie install hmennen90/php-metal-gpu:@dev",
                 "ext-parallel": "Required for multithreading support (ZTS build)",
-                "ext-vulkan": "Vulkan 3D backend (renderBackend3D: 'vulkan') — install via PIE: pie install hmennen90/php-vulkan"
+                "ext-vulkan": "Vulkan 3D backend (renderBackend3D: 'vulkan') - install via PIE: pie install hmennen90/php-vulkan"
             },
             "bin": [
                 "bin/phpolygon"
