@@ -47,7 +47,7 @@ class Game
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
             renderBackend3D: 'auto',
-            vioBackend: 'd3d11',
+            vioBackend: 'd3d12',
         ));
 
         $engine->onInit(function (Engine $engine) {
