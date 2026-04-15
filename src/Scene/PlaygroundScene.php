@@ -282,31 +282,31 @@ class PlaygroundScene extends Scene
                 intensity: 0.3,
             ));
 
-        // === POINT LIGHTS for local warmth ===
+        // === POINT LIGHTS — local accents only (directional sun does global) ===
         $builder->entity('SunsetGlow')
-            ->with(new Transform3D(position: new Vec3(15.0, 15.0, -25.0)))
+            ->with(new Transform3D(position: new Vec3(15.0, 4.0, -25.0)))
             ->with(new PointLight(
                 color: Color::hex('#FFD494'),
-                intensity: 2.0,
-                radius: 60.0,
+                intensity: 1.5,
+                radius: 12.0,
             ));
 
-        // Beach area warm fill
+        // Beach area warm fill (near hut)
         $builder->entity('BeachLight')
-            ->with(new Transform3D(position: new Vec3(0.0, 8.0, 10.0)))
+            ->with(new Transform3D(position: new Vec3(0.0, 3.0, 10.0)))
             ->with(new PointLight(
                 color: Color::hex('#FFF0D0'),
-                intensity: 1.0,
-                radius: 40.0,
+                intensity: 0.8,
+                radius: 8.0,
             ));
 
-        // Cool water reflection
+        // Cool water reflection (shore edge)
         $builder->entity('ShoreGlow')
-            ->with(new Transform3D(position: new Vec3(0.0, 2.0, -8.0)))
+            ->with(new Transform3D(position: new Vec3(0.0, 1.0, -8.0)))
             ->with(new PointLight(
                 color: Color::hex('#88CCEE'),
-                intensity: 0.5,
-                radius: 25.0,
+                intensity: 0.4,
+                radius: 10.0,
             ));
     }
 
@@ -1452,9 +1452,9 @@ class PlaygroundScene extends Scene
             ));
 
         // === HANGING LANTERN (on porch) ===
-        $lanternPos = $this->rotateAroundHut($hx, $hy + $wallH - 0.1, $hz + $d * 0.5 + $porchD * 0.5, $hx, $hz, $hutYaw);
+        $lanternPos = $this->rotateAroundHut($hx, $hy + $wallH - 0.1, $hz + $d * 0.5 + 0.3, $hx, $hz, $hutYaw);
         LanternBuilder::hanging(ropeLength: 0.5)
-            ->withLight(intensity: 1.5, radius: 6.0, color: '#FFCC66')
+            ->withLight(intensity: 1.2, radius: 3.0, color: '#FFCC66')
             ->withPrefix('Hut')
             ->build($builder, $lanternPos, $hutRot, new FurnitureMaterials(
                 primary: FabricMaterials::id('rope_dark'),
