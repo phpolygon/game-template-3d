@@ -113,13 +113,16 @@ class PlaygroundScene extends Scene
             roughness: 0.1,
             alpha: 0.0, // invisible initially
         ));
+        if (!MeshRegistry::has('precip_quad')) {
+            MeshRegistry::register('precip_quad', PlaneMesh::generate(1.0, 1.0, 1));
+        }
         for ($i = 0; $i < 150; $i++) {
             $builder->entity("Precip_{$i}")
                 ->with(new Transform3D(
                     position: new Vec3(0, -100, 0), // hidden below world
                     scale: new Vec3(0.01, 0.15, 0.01),
                 ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: 'precipitation'));
+                ->with(new MeshRenderer(meshId: 'precip_quad', materialId: 'precipitation'));
         }
         $this->buildTerrain($builder);
         $this->buildOceanAndWaves($builder);
@@ -336,9 +339,9 @@ class PlaygroundScene extends Scene
             MeshRegistry::register('beach_terrain', \App\Geometry\TerrainMesh::generate(
                 xMin: -55.0,
                 xMax: 55.0,
-                zMin: -13.0,
+                zMin: -50.0,
                 zMax: 40.0,
-                step: 0.25,
+                step: 0.5,
                 heightFn: fn(float $x, float $z) => $this->beachHeightFn($x, $z),
             ));
         }
@@ -359,7 +362,7 @@ class PlaygroundScene extends Scene
             gridDepth: 128,
             worldMinX: -55.0,
             worldMaxX: 55.0,
-            worldMinZ: -10.0,
+            worldMinZ: -50.0,
             worldMaxZ: 45.0,
         );
         $hm->populateFromFunction(fn(float $x, float $z) => $this->beachHeightFn($x, $z)['y']);
@@ -393,15 +396,19 @@ class PlaygroundScene extends Scene
     private function beachHeightFn(float $x, float $z): array
     {
         // Base slope: terrain rises in +Z direction (toward back-beach/dunes)
-        // Player starts at Z=12, sand slopes upward from there
-        // At Z=-10 (3m past the low point) → cliff drops off
+        // Shoreline at Z≈-5, gentle slope into water, gradual seabed descent
         $y = 0.0;
         if ($z > 0.0) {
             $y = $z * 0.02; // gentle uphill slope toward dunes
-        }
-        // Cliff: steep drop after Z=-10
-        if ($z < -10.0) {
-            $y -= (-10.0 - $z) * 2.0; // sharp drop-off
+        } elseif ($z > -5.0) {
+            // Shoreline zone: very gentle slope into water
+            $y = $z * 0.04; // Y=-0.2 at Z=-5
+        } else {
+            // Underwater: gradual seabed slope (not a cliff)
+            $shoreY = -5.0 * 0.04; // -0.2 at shoreline
+            $depth = -5.0 - $z;    // distance from shore
+            // Smooth curve: fast at first, levels off deeper
+            $y = $shoreY - $depth * 0.12 - $depth * $depth * 0.002;
         }
 
         // === DUNES — distinct hills along the back beach ===
@@ -450,7 +457,11 @@ class PlaygroundScene extends Scene
         // Variant index from position → adjacent grains get different shades
         $variant = abs((int) (floor($x * 7.3 + $z * 11.1) + floor($x * 3.7 - $z * 5.9))) % 4;
 
-        if ($z < -1.0) {
+        if ($z < -8.0) {
+            $material = 'seafloor';
+        } elseif ($z < -3.0) {
+            $material = "sand_damp_{$variant}";
+        } elseif ($z < -1.0) {
             $material = "sand_damp_{$variant}";
         } elseif ($z < 10.0) {
             $material = "sand_mid_{$variant}";
@@ -475,7 +486,7 @@ class PlaygroundScene extends Scene
         // Single subdivided plane with GPU wave animation
         // 64x64 grid = 4096 vertices — enough for smooth waves
         if (!MeshRegistry::has('water_plane')) {
-            MeshRegistry::register('water_plane', PlaneMesh::generate(140.0, 90.0, 64));
+            MeshRegistry::register('water_plane', PlaneMesh::generate(140.0, 90.0, 192));
         }
 
         // Main water surface — semitransparent, positioned at shore level
@@ -567,19 +578,24 @@ class PlaygroundScene extends Scene
         }
 
         $rocks = [
-            ['pos' => new Vec3(-4.0, 0.4, -3.0), 'scale' => new Vec3(1.5, 1.0, 1.2), 'mat' => 'rock'],
-            ['pos' => new Vec3(5.0, 0.25, -5.0), 'scale' => new Vec3(0.9, 0.6, 1.0), 'mat' => 'rock_dark'],
-            ['pos' => new Vec3(-10.0, 0.5, 2.0), 'scale' => new Vec3(1.8, 1.2, 1.5), 'mat' => 'rock'],
-            ['pos' => new Vec3(12.0, 0.3, -2.0), 'scale' => new Vec3(0.8, 0.7, 0.9), 'mat' => 'rock_mossy'],
-            ['pos' => new Vec3(-2.0, 0.6, -6.0), 'scale' => new Vec3(2.2, 1.4, 2.0), 'mat' => 'rock_dark'],
-            ['pos' => new Vec3(9.0, 0.2, 1.0), 'scale' => new Vec3(0.6, 0.5, 0.7), 'mat' => 'rock'],
-            ['pos' => new Vec3(-8.0, 0.4, -4.0), 'scale' => new Vec3(1.2, 0.8, 1.3), 'mat' => 'rock_mossy'],
-            ['pos' => new Vec3(18.0, 0.35, -1.0), 'scale' => new Vec3(1.0, 0.9, 1.1), 'mat' => 'rock_dark'],
-            ['pos' => new Vec3(-16.0, 0.45, 0.0), 'scale' => new Vec3(1.6, 1.1, 1.4), 'mat' => 'rock'],
-            ['pos' => new Vec3(7.0, 0.15, -7.0), 'scale' => new Vec3(0.5, 0.35, 0.6), 'mat' => 'rock_dark'],
+            ['x' => -4.0, 'z' => -3.0, 'scale' => new Vec3(1.5, 1.0, 1.2), 'mat' => 'rock'],
+            ['x' => 5.0, 'z' => -5.0, 'scale' => new Vec3(0.9, 0.6, 1.0), 'mat' => 'rock_dark'],
+            ['x' => -10.0, 'z' => 2.0, 'scale' => new Vec3(1.8, 1.2, 1.5), 'mat' => 'rock'],
+            ['x' => 12.0, 'z' => -2.0, 'scale' => new Vec3(0.8, 0.7, 0.9), 'mat' => 'rock_mossy'],
+            ['x' => -2.0, 'z' => -6.0, 'scale' => new Vec3(2.2, 1.4, 2.0), 'mat' => 'rock_dark'],
+            ['x' => 9.0, 'z' => 1.0, 'scale' => new Vec3(0.6, 0.5, 0.7), 'mat' => 'rock'],
+            ['x' => -8.0, 'z' => -4.0, 'scale' => new Vec3(1.2, 0.8, 1.3), 'mat' => 'rock_mossy'],
+            ['x' => 18.0, 'z' => -1.0, 'scale' => new Vec3(1.0, 0.9, 1.1), 'mat' => 'rock_dark'],
+            ['x' => -16.0, 'z' => 0.0, 'scale' => new Vec3(1.6, 1.1, 1.4), 'mat' => 'rock'],
+            ['x' => 7.0, 'z' => -7.0, 'scale' => new Vec3(0.5, 0.35, 0.6), 'mat' => 'rock_dark'],
         ];
 
         foreach ($rocks as $i => $rock) {
+            // Place on terrain: query height + sink half the scaled height into ground
+            $terrainY = $this->beachHeightFn($rock['x'], $rock['z'])['y'];
+            $sinkFactor = $rock['scale']->y * 0.3; // partially buried
+            $pos = new Vec3($rock['x'], $terrainY - $sinkFactor, $rock['z']);
+
             $rotation = Quaternion::fromEuler(
                 sin($i * 1.7) * 0.2,
                 $i * 0.8,
@@ -588,7 +604,7 @@ class PlaygroundScene extends Scene
 
             $builder->entity("Rock_{$i}")
                 ->with(new Transform3D(
-                    position: $rock['pos'],
+                    position: $pos,
                     rotation: $rotation,
                     scale: $rock['scale'],
                 ))
