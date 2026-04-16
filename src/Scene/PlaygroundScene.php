@@ -1082,15 +1082,15 @@ class PlaygroundScene extends Scene
 
         // Rocks
         MaterialRegistry::register('rock', new Material(
-            albedo: Color::hex('#4A4A4A'),
+            albedo: Color::hex('#7A7A7A'),
             roughness: 0.85,
         ));
         MaterialRegistry::register('rock_dark', new Material(
-            albedo: Color::hex('#2E2E2E'),
+            albedo: Color::hex('#5A5A5A'),
             roughness: 0.9,
         ));
         MaterialRegistry::register('rock_mossy', new Material(
-            albedo: Color::hex('#3A4A35'),
+            albedo: Color::hex('#5A6A55'),
             roughness: 0.88,
         ));
 
