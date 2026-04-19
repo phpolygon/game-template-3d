@@ -7,7 +7,7 @@ namespace App\Scene;
 use App\Component\FirstPersonCamera;
 use App\Geometry\RainbowArcMesh;
 use App\Prefab\PalmBuilder;
-use App\Component\PlayerBody;
+use App\Prefab\PlayerBuilder;
 use App\Geometry\PlankWallMesh;
 use App\Prefab\SandGrain;
 use App\Prefab\WaterPixel;
@@ -134,40 +134,26 @@ class PlaygroundScene extends Scene
 
     private function buildPlayer(SceneBuilder $builder): void
     {
+        // eyeOffset lifts the camera to eye height while the physics capsule
+        // stays centred on the body. Value picked so the camera sits above the
+        // shoulders and below the head box — looking up shows the head from
+        // below, looking down shows the whole torso.
         $builder->entity('Player')
             ->with(new Transform3D(
                 position: new Vec3(0.0, 1.5, 12.0),
             ))
-            ->with(new Camera3DComponent(fov: 70.0, near: 0.3, far: 500.0))
+            ->with(new Camera3DComponent(
+                fov: 70.0,
+                near: 0.3,
+                far: 500.0,
+                eyeOffset: new Vec3(0.0, 0.78, 0.0),
+            ))
             ->with(new CharacterController3D(height: 1.8, radius: 0.3))
             ->with(new FirstPersonCamera());
 
-        // Visible player body — two legs visible when looking down
-        $builder->entity('PlayerBody')
-            ->with(new Transform3D(
-                position: new Vec3(0.0, 0.3, 12.0),
-                scale: new Vec3(0.3, 0.6, 0.3),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'player_body'))
-            ->with(new PlayerBody());
-
-        // Left foot
-        $builder->entity('PlayerFootL')
-            ->with(new Transform3D(
-                position: new Vec3(-0.15, 0.05, 11.7),
-                scale: new Vec3(0.12, 0.08, 0.25),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'player_shoe'))
-            ->with(new PlayerBody());
-
-        // Right foot
-        $builder->entity('PlayerFootR')
-            ->with(new Transform3D(
-                position: new Vec3(0.15, 0.05, 11.7),
-                scale: new Vec3(0.12, 0.08, 0.25),
-            ))
-            ->with(new MeshRenderer(meshId: 'box', materialId: 'player_shoe'))
-            ->with(new PlayerBody());
+        // Low-poly humanoid body — head, torso, arms, legs, hair, eyes.
+        // PlayerBodySystem positions and animates every part each frame.
+        PlayerBuilder::at(height: 1.8)->build($builder);
     }
 
     private function buildLighting(SceneBuilder $builder): void
@@ -581,14 +567,30 @@ class PlaygroundScene extends Scene
 
         // Shore blend — wet sand visible through thin water layer
         // Progressively darker as water depth increases, gaining reflectivity
-        // Player body
-        MaterialRegistry::register('player_body', new Material(
+        // Player body parts — low-poly humanoid
+        MaterialRegistry::register('player_skin', new Material(
+            albedo: Color::hex('#E8C8A8'),
+            roughness: 0.75,
+        ));
+        MaterialRegistry::register('player_hair', new Material(
+            albedo: Color::hex('#3A2818'),
+            roughness: 0.85,
+        ));
+        MaterialRegistry::register('player_shirt', new Material(
             albedo: Color::hex('#4A7A8C'),
-            roughness: 0.8,
+            roughness: 0.80,
+        ));
+        MaterialRegistry::register('player_pants', new Material(
+            albedo: Color::hex('#2A3548'),
+            roughness: 0.82,
         ));
         MaterialRegistry::register('player_shoe', new Material(
             albedo: Color::hex('#3B2F2F'),
             roughness: 0.9,
+        ));
+        MaterialRegistry::register('player_eye', new Material(
+            albedo: Color::hex('#1A1A1A'),
+            roughness: 0.35,
         ));
 
         // Footprints
