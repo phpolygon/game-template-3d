@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Scene;
 
-use App\Component\CloudDrift;
 use App\Component\FirstPersonCamera;
 use App\Geometry\RainbowArcMesh;
 use App\Prefab\PalmBuilder;
@@ -129,7 +128,7 @@ class PlaygroundScene extends Scene
         $this->buildRocks($builder);
         $this->buildBeachDetails($builder);
         $this->buildBeachHut($builder);
-        $this->buildClouds($builder);
+        // Clouds are drawn by the atmospheric sky shader — no mesh entities.
         $this->buildRainbow($builder);
     }
 
@@ -551,134 +550,6 @@ class PlaygroundScene extends Scene
             ->with(new MeshRenderer(meshId: 'rainbow_arc', materialId: 'rainbow'));
     }
 
-    private function buildClouds(SceneBuilder $builder): void
-    {
-        // Register unique cloud puff meshes
-        for ($i = 0; $i < 6; $i++) {
-            $meshId = "cloud_puff_{$i}";
-            if (!MeshRegistry::has($meshId)) {
-                MeshRegistry::register($meshId, \App\Geometry\CloudPuffMesh::generate($i));
-            }
-        }
-
-        // Distribute clouds on a hemisphere covering the landscape
-        $hemisphereRadius = 200.0;
-        $hemisphereCenter = new Vec3(0.0, 0.0, -30.0);
-        $cloudCount = 14;
-        $clouds = [];
-        $rng = mt_rand(0, 0); // seed for deterministic placement
-        for ($i = 0; $i < $cloudCount; $i++) {
-            // Golden-angle spiral distribution on hemisphere for even coverage
-            $phi = acos(1.0 - ($i + 0.5) / $cloudCount); // polar angle (0=top, pi/2=horizon)
-            $phi = min($phi, M_PI * 0.42); // clamp to upper hemisphere (max ~75° from zenith)
-            $theta = $i * 2.39996323; // golden angle
-            $x = $hemisphereCenter->x + $hemisphereRadius * sin($phi) * cos($theta);
-            $z = $hemisphereCenter->z + $hemisphereRadius * sin($phi) * sin($theta);
-            $y = $hemisphereRadius * cos($phi);
-            $clouds[] = [
-                'x' => $x,
-                'y' => max(35.0, $y),
-                'z' => $z,
-                'speed' => 0.3 + ($i % 5) * 0.15,
-                'size' => 0.8 + ($i % 4) * 0.2,
-            ];
-        }
-
-        $globalPuffIndex = 0;
-        foreach ($clouds as $ci => $cloud) {
-            $sz = $cloud['size'];
-            // Build each cloud from many overlapping, very flat spheres
-            $puffs = $this->generateCloudPuffs($ci, $sz);
-
-            foreach ($puffs as $pi => $puff) {
-                $drift = new CloudDrift();
-                $drift->speed = $cloud['speed'];
-                $drift->resetMinX = -250.0;
-                $drift->resetMaxX = 250.0;
-                $drift->bobAmplitude = 0.1 + $pi * 0.01;
-                $drift->bobFrequency = 0.08 + $ci * 0.01;
-                $drift->phaseOffset = $ci * 1.5 + $pi * 0.3;
-                $drift->cloudIndex = $globalPuffIndex++;
-
-                // Top puffs bright, bottom ones shadowed
-                $matId = $puff['y'] > 0.0 ? 'cloud_top' : 'cloud_base';
-                if ($pi < 3) {
-                    $matId = 'cloud_bright';
-                }
-
-                $puffMeshId = 'cloud_puff_' . (($ci + $pi) % 6);
-
-                $builder->entity("Cloud_{$ci}_{$pi}")
-                    ->with(new Transform3D(
-                        position: new Vec3(
-                            $cloud['x'] + $puff['x'],
-                            $cloud['y'] + $puff['y'],
-                            $cloud['z'] + $puff['z'],
-                        ),
-                        scale: new Vec3($puff['sx'], $puff['sy'], $puff['sz']),
-                    ))
-                    ->with(new MeshRenderer(meshId: $puffMeshId, materialId: $matId))
-                    ->with($drift);
-            }
-        }
-    }
-
-    /**
-     * Generate puff positions/scales for one cloud.
-     * Real cumulus: wide flat base, rounded bumpy top.
-     */
-    private function generateCloudPuffs(int $seed, float $size): array
-    {
-        $puffs = [];
-
-        // Core mass — large flat ellipsoids forming the base
-        $coreCount = 6;
-        for ($i = 0; $i < $coreCount; $i++) {
-            $angle = ($i / $coreCount) * 2.0 * M_PI + $seed * 0.5;
-            $r = 3.0 + sin($seed + $i * 1.7) * 1.5;
-            $puffs[] = [
-                'x' => cos($angle) * $r * $size,
-                'y' => -0.3 + sin($i * 0.8) * 0.3,
-                'z' => sin($angle) * $r * 0.7 * $size,
-                'sx' => (5.0 + sin($seed + $i) * 2.0) * $size,
-                'sy' => (1.0 + cos($i * 1.3) * 0.3) * $size,
-                'sz' => (4.0 + cos($seed + $i) * 1.5) * $size,
-            ];
-        }
-
-        // Top bumps — smaller puffs on top creating cauliflower shape
-        $bumpCount = 8;
-        for ($i = 0; $i < $bumpCount; $i++) {
-            $angle = ($i / $bumpCount) * 2.0 * M_PI + $seed * 1.1;
-            $r = 2.0 + sin($seed * 2 + $i * 2.3) * 1.5;
-            $puffs[] = [
-                'x' => cos($angle) * $r * $size,
-                'y' => 0.8 + sin($i * 1.1 + $seed) * 0.5,
-                'z' => sin($angle) * $r * 0.6 * $size,
-                'sx' => (3.0 + sin($seed + $i * 0.9) * 1.0) * $size,
-                'sy' => (1.2 + cos($i * 1.5) * 0.4) * $size,
-                'sz' => (2.5 + cos($seed + $i * 0.7) * 0.8) * $size,
-            ];
-        }
-
-        // Wispy edges — small flat spheres around the perimeter
-        $edgeCount = 5;
-        for ($i = 0; $i < $edgeCount; $i++) {
-            $angle = ($i / $edgeCount) * 2.0 * M_PI + $seed * 0.3;
-            $r = 5.0 + sin($seed + $i * 3.1) * 1.0;
-            $puffs[] = [
-                'x' => cos($angle) * $r * $size,
-                'y' => -0.2 + sin($i * 2.1) * 0.2,
-                'z' => sin($angle) * $r * 0.5 * $size,
-                'sx' => (2.5 + sin($i * 1.4) * 0.5) * $size,
-                'sy' => (0.5 + cos($i * 0.9) * 0.15) * $size,
-                'sz' => (2.0 + cos($i * 1.2) * 0.4) * $size,
-            ];
-        }
-
-        return $puffs;
-    }
-
     private function registerMeshes(): void
     {
         if (!MeshRegistry::has('box')) {
@@ -1013,25 +884,6 @@ class PlaygroundScene extends Scene
         //  Mid: off-white
         //  Base/shadow: light gray
         // ======================
-
-        MaterialRegistry::register('cloud_bright', new Material(
-            albedo: Color::hex('#FFFFFF'),
-            roughness: 1.0,
-            emission: Color::hex('#AAAAAA'),
-            alpha: 0.9,
-        ));
-        MaterialRegistry::register('cloud_top', new Material(
-            albedo: Color::hex('#F8F8FF'),
-            roughness: 1.0,
-            emission: Color::hex('#888888'),
-            alpha: 0.85,
-        ));
-        MaterialRegistry::register('cloud_base', new Material(
-            albedo: Color::hex('#D0D5DD'),
-            roughness: 1.0,
-            emission: Color::hex('#555566'),
-            alpha: 0.8,
-        ));
 
         // Foam already registered above — override with alpha versions
         MaterialRegistry::register('foam', new Material(

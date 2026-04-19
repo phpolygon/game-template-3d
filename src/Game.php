@@ -6,7 +6,6 @@ namespace App;
 
 use App\System\AmbientAudioSystem;
 use App\System\AmbientLightSystem;
-use App\System\CloudSystem;
 use App\System\CoconutSystem;
 use App\System\FirstPersonCameraSystem;
 use App\System\FootprintSystem;
@@ -47,7 +46,7 @@ class Game
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
             renderBackend3D: 'auto',
-            vioBackend: 'd3d12',
+            vioBackend: 'd3d11',
         ));
 
         $engine->onInit(function (Engine $engine) {
@@ -162,7 +161,6 @@ class Game
             $engine->world->addSystem(new CoconutSystem());
             $engine->world->addSystem(new WaveSystem());
             $engine->world->addSystem(new FootprintSystem());
-            $engine->world->addSystem(new CloudSystem());
             $engine->world->addSystem(new AmbientAudioSystem($audioManager, $config->assetsPath));
             $engine->world->addSystem(new AtmosphericEnvironmentalSystem());
             $engine->world->addSystem(new PrecipitationSystem());
