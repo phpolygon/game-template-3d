@@ -185,32 +185,9 @@ class PlaygroundScene extends Scene
                 intensity: 1.5,
             ));
 
-        // === SUN — single lit sphere, moved each frame by DayNightSystem ===
-        // Atmospheric scattering around the sun is baked into the skybox cubemap
-        // (ProceduralSky generates a warm horizon band near the sun direction),
-        // so this entity only needs to represent the sun's visible disc.
-        $sunStart = new Vec3(20.0, 65.0, -50.0);
-        $builder->entity('SunDisc')
-            ->with(new Transform3D(position: $sunStart, scale: new Vec3(6.0, 6.0, 6.0)))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_disc'));
-
-        // === MOON (3-layer: surface, shadow crescent, soft glow) ===
-        $moonHidden = new Vec3(0.0, -100.0, 0.0);
-        MaterialRegistry::register('moon_disc', new Material(
-            albedo: Color::hex('#000000'), emission: Color::hex('#D0D8E8'),
-        ));
-        $builder->entity('MoonDisc')
-            ->with(new Transform3D(position: $moonHidden, scale: new Vec3(2.5, 2.5, 2.5)))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_disc'));
-
-        // Moon phase is rendered procedurally by proc_mode 9 shader — no shadow sphere needed
-
-        MaterialRegistry::register('moon_glow', new Material(
-            albedo: Color::hex('#000000'), emission: Color::hex('#3A4060'), alpha: 0.3,
-        ));
-        $builder->entity('MoonGlow')
-            ->with(new Transform3D(position: $moonHidden, scale: new Vec3(6.0, 6.0, 6.0)))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_glow'));
+        // Sun and moon are drawn analytically by the atmospheric sky shader;
+        // the Sun directional light above is what actually illuminates the
+        // scene. No sun_disc / moon_disc / moon_glow sphere entities.
 
         // Sky fill + static point-light accents removed — DayNightSystem's
         // directional sun + time-driven ambient drive the scene entirely so
