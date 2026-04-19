@@ -768,18 +768,22 @@ class PlaygroundScene extends Scene
                 ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
         }
 
-        // Cross-braces under floor (X-pattern on left side)
+        // Cross-braces under floor — true X-pattern on both front and back
+        // faces of the stilt frame (was previously a single pair on one side,
+        // which read as asymmetric stub braces rather than an X).
         $braceLen = sqrt(($w * 0.9) ** 2 + $hy ** 2);
         $braceAngle = atan2($hy, $w * 0.9);
-        foreach ([1.0, -1.0] as $bi => $dir) {
-            $bRot = $yawQ->multiply(Quaternion::fromAxisAngle(new Vec3(0.0, 0.0, 1.0), $dir * $braceAngle));
-            $builder->entity("Hut_Brace_{$bi}")
-                ->with(new Transform3D(
-                    position: $this->rotateAroundHut($hx, $stiltH, $hz - $d * 0.45, $hx, $hz, $hutYaw),
-                    rotation: $bRot,
-                    scale: new Vec3(0.03, $braceLen * 0.48, 0.03),
-                ))
-                ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+        foreach ([['back', -$d * 0.45], ['front', $d * 0.45]] as [$faceLabel, $zOff]) {
+            foreach ([1.0, -1.0] as $bi => $dir) {
+                $bRot = $yawQ->multiply(Quaternion::fromAxisAngle(new Vec3(0.0, 0.0, 1.0), $dir * $braceAngle));
+                $builder->entity("Hut_Brace_{$faceLabel}_{$bi}")
+                    ->with(new Transform3D(
+                        position: $this->rotateAroundHut($hx, $stiltH, $hz + $zOff, $hx, $hz, $hutYaw),
+                        rotation: $bRot,
+                        scale: new Vec3(0.03, $braceLen * 0.48, 0.03),
+                    ))
+                    ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('beam')));
+            }
         }
 
         // === FLOOR ===
@@ -790,7 +794,7 @@ class PlaygroundScene extends Scene
                 scale: new Vec3($w * 0.5, 0.05, $d * 0.5),
             ))
             ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('floor')))
-            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+            ->with(self::boxMeshCollider());
 
         // === WALLS (all BoxMesh — proc_mode 7 shader adds plank grain) ===
         // All walls overlap at corners by ~10cm to guarantee no visible gaps.
@@ -844,7 +848,7 @@ class PlaygroundScene extends Scene
                 scale: new Vec3($w * 0.5, 0.04, $porchD * 0.5),
             ))
             ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('floor')))
-            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+            ->with(self::boxMeshCollider());
 
         // Porch front posts (2)
         foreach ([-1, 1] as $side) {
@@ -883,7 +887,7 @@ class PlaygroundScene extends Scene
                 scale: new Vec3($railThick, $railH * 0.5, $porchD * 0.5),
             ))
             ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo')))
-            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+            ->with(self::boxMeshCollider());
 
         // Right railing (with collision wall)
         $builder->entity('Hut_RailRight')
@@ -893,7 +897,7 @@ class PlaygroundScene extends Scene
                 scale: new Vec3($railThick, $railH * 0.5, $porchD * 0.5),
             ))
             ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo')))
-            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+            ->with(self::boxMeshCollider());
 
         // Front railing (two sections with gap for steps in the middle, with collision)
         $frontRailW = ($w - 1.0) * 0.25;
@@ -906,7 +910,7 @@ class PlaygroundScene extends Scene
                     scale: new Vec3($frontRailW, $railH * 0.5, $railThick),
                 ))
                 ->with(new MeshRenderer(meshId: 'cylinder', materialId: WoodMaterials::id('bamboo')))
-                ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+                ->with(self::boxMeshCollider());
         }
 
         // Railing vertical supports (6 bamboo spindles)
@@ -946,7 +950,7 @@ class PlaygroundScene extends Scene
                     scale: new Vec3($stepW * 0.5, $columnH * 0.5, $stepD * 0.5),
                 ))
                 ->with(new MeshRenderer(meshId: 'box', materialId: WoodMaterials::id('plank_weathered')))
-                ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+                ->with(self::boxMeshCollider());
         }
 
         // === ROOF (thatched, asymmetric — front extends over porch) ===
@@ -1097,7 +1101,7 @@ class PlaygroundScene extends Scene
                 scale: new Vec3($w * 0.5, $h * 0.5, $d * 0.5),
             ))
             ->with(new MeshRenderer(meshId: 'box', materialId: $matId))
-            ->with(new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true));
+            ->with(self::boxMeshCollider());
     }
 
     private function buildHutWallWithDoor(SceneBuilder $builder, float $hx, float $hy, float $hz,
@@ -1146,6 +1150,18 @@ class PlaygroundScene extends Scene
 
         $this->buildHutWall($builder, 'Hut_RightWinRight', $hx, $hy + $winY - $winH * 0.5, $hz,
             $w * 0.5, 0.0, $winW * 0.5 + $sideD * 0.5, $wallT, $winH, $sideD, $hutRot, WoodMaterials::id('plank'));
+    }
+
+    /**
+     * BoxMesh vertices span [-1, +1] on each axis (full extent 2). A
+     * BoxCollider3D attached to an entity using BoxMesh must therefore be
+     * sized 2×2×2 in local units — the entity's Transform3D.scale (half
+     * the desired world size) then scales both mesh and collider to the
+     * same world dimensions. This helper hides that convention.
+     */
+    private static function boxMeshCollider(): BoxCollider3D
+    {
+        return new BoxCollider3D(size: new Vec3(2.0, 2.0, 2.0), isStatic: true);
     }
 
     /**

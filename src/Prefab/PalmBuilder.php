@@ -109,8 +109,11 @@ class PalmBuilder
             $rotation = self::rotationFromYUp($dx / $segLen, $dy / $segLen, $dz / $segLen);
             $center = new Vec3(($bot->x + $top->x) * 0.5, ($bot->y + $top->y) * 0.5, ($bot->z + $top->z) * 0.5);
 
-            // Slim trunk: 0.16 base → 0.08 top, with root flare at very bottom
-            $rootFlare = $s === 0 ? 0.06 : ($s === 1 ? 0.03 : 0.0);
+            // Slim trunk: 0.16 base → 0.08 top, with a gently tapering root
+            // flare that decays over the first three segments so no visible
+            // radius step forms between segments 1 and 2.
+            $flareT = max(0.0, 1.0 - $tMid / 0.25); // 1 at ground, 0 by t=0.25
+            $rootFlare = 0.06 * $flareT * $flareT;
             $radius = 0.16 - $tMid * 0.08 + $rootFlare;
 
             $matId = 'palm_trunk';
@@ -118,17 +121,26 @@ class PalmBuilder
                 $matId = 'palm_trunk_dark';
             }
 
-            // Generous overlap to eliminate segment gaps
-            $entity = $builder->entity("{$prefix}_T_{$s}")
+            // Segment overlap tuned just below half so adjacent segments
+            // cover the joint without creating visible walls of z-fighting
+            // through the interior when the trunk bends.
+            $segEntity = $builder->entity("{$prefix}_T_{$s}")
                 ->with(new Transform3D(
                     position: $center,
                     rotation: $rotation,
-                    scale: new Vec3($radius, $segLen * 0.56, $radius),
+                    scale: new Vec3($radius, $segLen * 0.52, $radius),
                 ))
                 ->with(new MeshRenderer(meshId: 'cylinder', materialId: $matId));
 
-            // Trunk segments are static — sway is handled by crown bulge + fronds only
-            // (individual segment PalmSway caused segments to drift apart)
+            // Top segment sways with the crown bulge so the bulge and fronds
+            // don't appear to float above a static trunk in strong wind.
+            if ($s === $this->trunkSegments - 1) {
+                $segEntity->with(new PalmSway(
+                    swayStrength: 0.35,
+                    phaseOffset: $this->index * 1.3,
+                    isTrunk: true,
+                ));
+            }
 
             // Ring scars every 3rd segment
             if ($s % 3 === 2 && $s < $this->trunkSegments - 1) {
@@ -142,13 +154,15 @@ class PalmBuilder
             }
         }
 
-        // Collider
+        // Collider — matches the slim trunk profile (0.16m base, 0.08m tip).
+        // The previous 0.7m box extended far beyond the visible trunk and
+        // created ghost collisions around the palm.
         $midJ = $joints[(int) ($this->trunkSegments / 2)];
         $builder->entity("{$prefix}_Col")
             ->with(new Transform3D(
                 position: new Vec3($midJ->x, $this->position->y + $this->height * 0.5, $midJ->z),
             ))
-            ->with(new BoxCollider3D(size: new Vec3(0.7, $this->height, 0.7), isStatic: true));
+            ->with(new BoxCollider3D(size: new Vec3(0.3, $this->height, 0.3), isStatic: true));
 
         return $joints[$this->trunkSegments];
     }
@@ -231,9 +245,10 @@ class PalmBuilder
         $rot = Quaternion::fromEuler($elev, $yaw, 0.0);
         $variant = ($this->index + $fi) % 4;
 
-        // Offset frond origin outward from crown center
-        $outward = $rot->rotateVec3(new Vec3(0.0, 0.12, 0.0));
-        $origin = $crownPos->add($outward);
+        // Fronds attach directly at the crown point; the previous outward
+        // offset along the rotated Y axis moved them slightly above the
+        // bulge, leaving a visible gap at the frond base.
+        $origin = $crownPos;
 
         $s = $len * 0.32;
         $builder->entity("{$prefix}_F_{$fi}")
