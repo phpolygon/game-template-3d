@@ -213,42 +213,10 @@ class PlaygroundScene extends Scene
             ->with(new Transform3D(position: $moonHidden, scale: new Vec3(6.0, 6.0, 6.0)))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'moon_glow'));
 
-        // === FILL LIGHT from sky ===
-        // Simulates scattered blue skylight hitting surfaces facing away from sun
-        $builder->entity('FillLight')
-            ->with(new Transform3D())
-            ->with(new DirectionalLight(
-                direction: new Vec3(0.3, -0.5, 0.3),
-                color: Color::hex('#B8D8F0'),
-                intensity: 0.3,
-            ));
-
-        // === POINT LIGHTS — local accents only (directional sun does global) ===
-        $builder->entity('SunsetGlow')
-            ->with(new Transform3D(position: new Vec3(15.0, 4.0, -25.0)))
-            ->with(new PointLight(
-                color: Color::hex('#FFD494'),
-                intensity: 1.5,
-                radius: 12.0,
-            ));
-
-        // Beach area warm fill (near hut)
-        $builder->entity('BeachLight')
-            ->with(new Transform3D(position: new Vec3(0.0, 3.0, 10.0)))
-            ->with(new PointLight(
-                color: Color::hex('#FFF0D0'),
-                intensity: 0.8,
-                radius: 8.0,
-            ));
-
-        // Cool water reflection (shore edge)
-        $builder->entity('ShoreGlow')
-            ->with(new Transform3D(position: new Vec3(0.0, 1.0, -8.0)))
-            ->with(new PointLight(
-                color: Color::hex('#88CCEE'),
-                intensity: 0.4,
-                radius: 10.0,
-            ));
+        // Sky fill + static point-light accents removed — DayNightSystem's
+        // directional sun + time-driven ambient drive the scene entirely so
+        // lighting follows the real time of day instead of being baked into
+        // fixed warm/cool spots.
     }
 
     private function buildWind(SceneBuilder $builder): void
