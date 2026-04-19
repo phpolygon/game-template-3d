@@ -390,7 +390,7 @@ class PlaygroundScene extends Scene
     {
         $palms = [
             ['pos' => new Vec3(-6.0, 0.0, 5.0),   'height' => 5.5, 'lean' => 0.15,  'coconuts' => 3],
-            ['pos' => new Vec3(8.0, 0.0, 7.0),     'height' => 6.0, 'lean' => -0.1,  'coconuts' => 2],
+            ['pos' => new Vec3(5.0, 0.0, 3.0),     'height' => 6.0, 'lean' => -0.1,  'coconuts' => 2],
             ['pos' => new Vec3(-14.0, 0.0, 12.0),  'height' => 4.5, 'lean' => 0.2,   'coconuts' => 4],
             ['pos' => new Vec3(3.0, 0.0, 16.0),    'height' => 5.0, 'lean' => -0.08, 'coconuts' => 2],
             ['pos' => new Vec3(16.0, 0.0, 4.0),    'height' => 5.8, 'lean' => 0.12,  'coconuts' => 3],
