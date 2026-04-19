@@ -371,58 +371,21 @@ class PlaygroundScene extends Scene
             MeshRegistry::register('water_plane', PlaneMesh::generate(140.0, 90.0, 192));
         }
 
-        // Main water surface — semitransparent, positioned at shore level
+        // One water surface — the procedural water shader (proc_mode 2)
+        // handles depth-based absorption, wave normals, fresnel reflection,
+        // sun specular, and shoreline foam directly. No separate deep-water
+        // layer needed.
         $builder->entity('WaterSurface')
             ->with(new Transform3D(
                 position: new Vec3(0.0, -0.3, -44.0),
             ))
             ->with(new MeshRenderer(meshId: 'water_plane', materialId: 'water_surface'));
-
-        // Deeper water layer — slightly lower, darker, more opaque
-        $builder->entity('WaterDeep')
-            ->with(new Transform3D(
-                position: new Vec3(0.0, -0.6, -44.0),
-            ))
-            ->with(new MeshRenderer(meshId: 'water_plane', materialId: 'water_deep_plane'));
     }
 
     /**
-     * Water height and material function.
-     * Height: gentle swell patterns.
-     * Material: based on depth (distance from shore Z=-8).
-     *
-     * @return array{y: float, material: string}
+     * (Legacy waterHeightFn + depth-variant water materials removed — the
+     * procedural water shader does it all at pixel level now.)
      */
-    private function waterHeightFn(float $x, float $z): array
-    {
-        // Base height — slight descent with depth
-        $depth = abs($z + 8.0); // distance from shore
-        $y = -0.25 - $depth * 0.004;
-
-        // Ocean swell — large slow waves
-        $swell = sin($x * 0.08 + $z * 0.12) * 0.15
-               + sin($x * 0.05 - $z * 0.08 + 1.3) * 0.1;
-        $y += $swell * min(1.0, $depth / 15.0); // swells grow with depth
-
-        // Smaller ripples
-        $ripple = sin($x * 0.5 + $z * 0.3) * 0.03
-                + sin($x * 0.3 - $z * 0.7 + 2.1) * 0.02;
-        $y += $ripple;
-
-        // Material by depth — smooth gradient through absorption colors
-        $t = min(1.0, $depth / 70.0); // 0 at shore, 1 at Z=-78
-
-        $materials = [
-            'water_crystal', 'water_turquoise', 'water_aqua', 'water_teal',
-            'water_blue', 'water_ocean', 'water_deep', 'water_navy',
-        ];
-
-        $matIndex = $t * (count($materials) - 1);
-        $material = $materials[(int) round($matIndex)];
-
-        return ['y' => $y, 'material' => $material];
-    }
-
     private function buildPalmTrees(SceneBuilder $builder): void
     {
         $palms = [
@@ -618,22 +581,6 @@ class PlaygroundScene extends Scene
 
         // Shore blend — wet sand visible through thin water layer
         // Progressively darker as water depth increases, gaining reflectivity
-        MaterialRegistry::register('shore_blend_1', new Material(
-            albedo: Color::hex('#8A7D6B'),
-            roughness: 0.15,
-            metallic: 0.35,
-        ));
-        MaterialRegistry::register('shore_blend_2', new Material(
-            albedo: Color::hex('#7E7568'),
-            roughness: 0.1,
-            metallic: 0.45,
-        ));
-        MaterialRegistry::register('shore_blend_3', new Material(
-            albedo: Color::hex('#908578'),
-            roughness: 0.06,
-            metallic: 0.55,
-        ));
-
         // Player body
         MaterialRegistry::register('player_body', new Material(
             albedo: Color::hex('#4A7A8C'),
@@ -680,103 +627,15 @@ class PlaygroundScene extends Scene
         //  High metallic + low roughness = specular highlights from sun/sky
         // ==============================
 
-        // Shore — sand visible through thin water film
-        MaterialRegistry::register('water_crystal', new Material(
-            albedo: Color::hex('#9B9080'),
-            roughness: 0.05,
-            metallic: 0.6,
-        ));
-        // Shallow — slight green-blue, sand still faintly visible
-        MaterialRegistry::register('water_turquoise', new Material(
-            albedo: Color::hex('#6B7B72'),
-            roughness: 0.04,
-            metallic: 0.65,
-        ));
-        // Moderate — red fully absorbed, green-blue dominant
-        MaterialRegistry::register('water_aqua', new Material(
-            albedo: Color::hex('#4A6B65'),
-            roughness: 0.04,
-            metallic: 0.7,
-        ));
-        // Deeper — less light returns, darker grey-teal
-        MaterialRegistry::register('water_teal', new Material(
-            albedo: Color::hex('#3A5550'),
-            roughness: 0.05,
-            metallic: 0.7,
-        ));
-        // Mid-ocean — blue-grey, losing brightness
-        MaterialRegistry::register('water_blue', new Material(
-            albedo: Color::hex('#2A4048'),
-            roughness: 0.06,
-            metallic: 0.75,
-        ));
-        // Open ocean — dark grey with blue shift
-        MaterialRegistry::register('water_ocean', new Material(
-            albedo: Color::hex('#1E3038'),
-            roughness: 0.07,
-            metallic: 0.75,
-        ));
-        // Deep — very little light returns
-        MaterialRegistry::register('water_deep', new Material(
-            albedo: Color::hex('#142428'),
-            roughness: 0.08,
-            metallic: 0.8,
-        ));
-        // Navy — almost all light absorbed
-        MaterialRegistry::register('water_navy', new Material(
-            albedo: Color::hex('#0C1820'),
-            roughness: 0.1,
-            metallic: 0.8,
-        ));
-        // Abyss — near black
-        MaterialRegistry::register('ocean_abyss', new Material(
-            albedo: Color::hex('#060E14'),
-            roughness: 0.12,
-            metallic: 0.8,
-        ));
-
-        // Animated water plane materials — semitransparent
+        // Single animated water surface — the procedural water shader
+        // (proc_mode 2) derives depth-based absorption, fresnel reflection,
+        // wave normals, sun specular and shoreline foam all from one
+        // material. No depth-variant or foam mesh materials needed.
         MaterialRegistry::register('water_surface', new Material(
             albedo: Color::hex('#3A8B9B'),
             roughness: 0.02,
             metallic: 0.8,
             alpha: 0.55,
-        ));
-        MaterialRegistry::register('water_deep_plane', new Material(
-            albedo: Color::hex('#1A3848'),
-            roughness: 0.05,
-            metallic: 0.7,
-            alpha: 0.7,
-        ));
-
-        // Underwater volume — dark sandy/silty layers beneath surface
-        MaterialRegistry::register('seafloor', new Material(
-            albedo: Color::hex('#2A2A20'),
-            roughness: 0.95,
-        ));
-        MaterialRegistry::register('underwater_shallow', new Material(
-            albedo: Color::hex('#1A2820'),
-            roughness: 0.9,
-        ));
-        MaterialRegistry::register('underwater_mid', new Material(
-            albedo: Color::hex('#101C18'),
-            roughness: 0.9,
-        ));
-        MaterialRegistry::register('underwater_deep', new Material(
-            albedo: Color::hex('#080E0C'),
-            roughness: 0.9,
-        ));
-
-        // Foam — real ocean foam is bright white
-        MaterialRegistry::register('foam', new Material(
-            albedo: Color::hex('#FFFFFF'),
-            roughness: 0.95,
-            emission: Color::hex('#444444'),
-        ));
-        MaterialRegistry::register('foam_thin', new Material(
-            albedo: Color::hex('#E0F0F8'),
-            roughness: 0.85,
-            emission: Color::hex('#222222'),
         ));
 
         // Palm trunks
@@ -861,20 +720,6 @@ class PlaygroundScene extends Scene
         //  Mid: off-white
         //  Base/shadow: light gray
         // ======================
-
-        // Foam already registered above — override with alpha versions
-        MaterialRegistry::register('foam', new Material(
-            albedo: Color::hex('#FFFFFF'),
-            roughness: 0.95,
-            emission: Color::hex('#333344'),
-
-        ));
-        MaterialRegistry::register('foam_thin', new Material(
-            albedo: Color::hex('#E8F4FF'),
-            roughness: 0.9,
-            emission: Color::hex('#222233'),
-
-        ));
 
         // Beach hut materials — loaded from engine presets
         WoodMaterials::registerAll();
