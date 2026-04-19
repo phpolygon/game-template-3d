@@ -75,7 +75,6 @@ class PlaygroundScene extends Scene
         $this->registerMeshes();
         $this->registerMaterials();
 
-        $this->buildSkyDome($builder);
         $this->buildPlayer($builder);
         $this->buildLighting($builder);
         $this->buildWind($builder);
@@ -172,66 +171,6 @@ class PlaygroundScene extends Scene
             ->with(new PlayerBody());
     }
 
-    // =========================================================================
-    //  SKY DOME — giant sphere seen from inside (no backface culling in OpenGL)
-    //  Layered shells create a gradient: horizon warm haze → mid azure → zenith deep blue
-    //  All emission-lit so they glow regardless of sun direction
-    // =========================================================================
-
-    private function buildSkyDome(SceneBuilder $builder): void
-    {
-        $center = new Vec3(0.0, -20.0, 0.0);
-        $radius = 350.0;
-
-        // Layer 1: Outer space / upper stratosphere — deepest blue/black at zenith
-        $builder->entity('SkyZenith')
-            ->with(new Transform3D(
-                position: new Vec3($center->x, $center->y + 40.0, $center->z),
-                scale: new Vec3($radius * 0.85, $radius * 0.7, $radius * 0.85),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_zenith'));
-
-        // Layer 2: Mid atmosphere / troposphere — main sky color
-        $builder->entity('SkyDome')
-            ->with(new Transform3D(
-                position: $center,
-                scale: new Vec3($radius, $radius, $radius),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_mid'));
-
-        // Layer 3: Stratosphere — transition layer between zenith and horizon
-        // Simulates Rayleigh scattering: light passes through more atmosphere at low angles
-        // making the sky whiter/paler near the horizon and deeper blue higher up
-        MaterialRegistry::register('sky_strato', new Material(
-            albedo: Color::hex('#000000'),
-            emission: Color::hex('#6A9AC0'),
-            alpha: 0.5,
-        ));
-        $builder->entity('SkyStrato')
-            ->with(new Transform3D(
-                position: new Vec3($center->x, $center->y + 10.0, $center->z),
-                scale: new Vec3($radius * 0.95, $radius * 0.55, $radius * 0.95),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_strato'));
-
-        // Layer 4: Horizon haze — dense atmosphere at ground level
-        // White/pale because all wavelengths scatter equally through thick air (Mie scattering)
-        $builder->entity('SkyHorizon')
-            ->with(new Transform3D(
-                position: new Vec3($center->x, $center->y - 10.0, $center->z),
-                scale: new Vec3($radius * 1.05, $radius * 0.35, $radius * 1.05),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_horizon'));
-
-        // Layer 5: Sun-side warmth — Mie forward scattering near sun position
-        $builder->entity('SkySunSide')
-            ->with(new Transform3D(
-                position: new Vec3(20.0, 10.0, -120.0),
-                scale: new Vec3(180.0, 120.0, 80.0),
-            ))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sky_sun_warm'));
-    }
-
     private function buildLighting(SceneBuilder $builder): void
     {
         // === PRIMARY SUN ===
@@ -247,15 +186,14 @@ class PlaygroundScene extends Scene
                 intensity: 1.5,
             ));
 
-        // === SUN (3-layer: bright core, warm corona, soft outer glow) ===
+        // === SUN — single lit sphere, moved each frame by DayNightSystem ===
+        // Atmospheric scattering around the sun is baked into the skybox cubemap
+        // (ProceduralSky generates a warm horizon band near the sun direction),
+        // so this entity only needs to represent the sun's visible disc.
         $sunStart = new Vec3(20.0, 65.0, -50.0);
         $builder->entity('SunDisc')
-            ->with(new Transform3D(position: $sunStart, scale: new Vec3(3.0, 3.0, 3.0)))
+            ->with(new Transform3D(position: $sunStart, scale: new Vec3(6.0, 6.0, 6.0)))
             ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_disc'));
-
-        $builder->entity('SunGlow')
-            ->with(new Transform3D(position: $sunStart, scale: new Vec3(14.0, 14.0, 14.0)))
-            ->with(new MeshRenderer(meshId: 'sphere', materialId: 'sun_glow'));
 
         // === MOON (3-layer: surface, shadow crescent, soft glow) ===
         $moonHidden = new Vec3(0.0, -100.0, 0.0);
@@ -655,19 +593,28 @@ class PlaygroundScene extends Scene
             }
         }
 
-        // Each cloud: center position + spread parameters
-        $clouds = [
-            ['x' => -25.0, 'y' => 45.0, 'z' => -50.0, 'speed' => 0.8, 'size' => 1.0],
-            ['x' => 30.0,  'y' => 50.0, 'z' => -65.0, 'speed' => 0.5, 'size' => 1.3],
-            ['x' => -55.0, 'y' => 48.0, 'z' => -55.0, 'speed' => 0.7, 'size' => 0.9],
-            ['x' => 65.0,  'y' => 52.0, 'z' => -70.0, 'speed' => 0.4, 'size' => 1.1],
-            ['x' => 5.0,   'y' => 46.0, 'z' => -80.0, 'speed' => 0.6, 'size' => 1.4],
-            ['x' => -40.0, 'y' => 55.0, 'z' => -90.0, 'speed' => 0.3, 'size' => 1.2],
-            ['x' => 50.0,  'y' => 44.0, 'z' => -45.0, 'speed' => 0.9, 'size' => 0.8],
-            ['x' => -70.0, 'y' => 47.0, 'z' => -60.0, 'speed' => 0.6, 'size' => 1.0],
-            ['x' => 15.0,  'y' => 53.0, 'z' => -75.0, 'speed' => 0.35, 'size' => 1.5],
-            ['x' => -10.0, 'y' => 42.0, 'z' => -40.0, 'speed' => 1.0, 'size' => 0.7],
-        ];
+        // Distribute clouds on a hemisphere covering the landscape
+        $hemisphereRadius = 200.0;
+        $hemisphereCenter = new Vec3(0.0, 0.0, -30.0);
+        $cloudCount = 14;
+        $clouds = [];
+        $rng = mt_rand(0, 0); // seed for deterministic placement
+        for ($i = 0; $i < $cloudCount; $i++) {
+            // Golden-angle spiral distribution on hemisphere for even coverage
+            $phi = acos(1.0 - ($i + 0.5) / $cloudCount); // polar angle (0=top, pi/2=horizon)
+            $phi = min($phi, M_PI * 0.42); // clamp to upper hemisphere (max ~75° from zenith)
+            $theta = $i * 2.39996323; // golden angle
+            $x = $hemisphereCenter->x + $hemisphereRadius * sin($phi) * cos($theta);
+            $z = $hemisphereCenter->z + $hemisphereRadius * sin($phi) * sin($theta);
+            $y = $hemisphereRadius * cos($phi);
+            $clouds[] = [
+                'x' => $x,
+                'y' => max(35.0, $y),
+                'z' => $z,
+                'speed' => 0.3 + ($i % 5) * 0.15,
+                'size' => 0.8 + ($i % 4) * 0.2,
+            ];
+        }
 
         $globalPuffIndex = 0;
         foreach ($clouds as $ci => $cloud) {
@@ -678,8 +625,8 @@ class PlaygroundScene extends Scene
             foreach ($puffs as $pi => $puff) {
                 $drift = new CloudDrift();
                 $drift->speed = $cloud['speed'];
-                $drift->resetMinX = -120.0;
-                $drift->resetMaxX = 120.0;
+                $drift->resetMinX = -250.0;
+                $drift->resetMaxX = 250.0;
                 $drift->bobAmplitude = 0.1 + $pi * 0.01;
                 $drift->bobFrequency = 0.08 + $ci * 0.01;
                 $drift->phaseOffset = $ci * 1.5 + $pi * 0.3;
@@ -770,8 +717,10 @@ class PlaygroundScene extends Scene
             MeshRegistry::register('box', BoxMesh::generate(2.0, 2.0, 2.0));
         }
         if (!MeshRegistry::has('sphere')) {
-            // Higher tessellation for smoother clouds and water
             MeshRegistry::register('sphere', SphereMesh::generate(1.0, 24, 36));
+        }
+        if (!MeshRegistry::has('hemisphere')) {
+            MeshRegistry::register('hemisphere', \App\Geometry\HemisphereMesh::generate(1.0, 16, 36));
         }
         if (!MeshRegistry::has('plane')) {
             MeshRegistry::register('plane', PlaneMesh::generate(1.0, 1.0));
@@ -801,34 +750,8 @@ class PlaygroundScene extends Scene
 
     private function registerMaterials(): void
     {
-        // ======================
-        //  SKY DOME — emission-only, self-lit
-        //  Reference: real tropical sky gradient
-        //  Zenith: deep blue #1E5FAA
-        //  Mid: azure #4A90D9
-        //  Horizon: warm haze #C8DCF0
-        // ======================
-
-        MaterialRegistry::register('sky_zenith', new Material(
-            albedo: Color::hex('#000000'),
-            roughness: 1.0,
-            emission: Color::hex('#1E5FAA'),
-        ));
-        MaterialRegistry::register('sky_mid', new Material(
-            albedo: Color::hex('#000000'),
-            roughness: 1.0,
-            emission: Color::hex('#4A90D9'),
-        ));
-        MaterialRegistry::register('sky_horizon', new Material(
-            albedo: Color::hex('#000000'),
-            roughness: 1.0,
-            emission: Color::hex('#87AECC'),
-        ));
-        MaterialRegistry::register('sky_sun_warm', new Material(
-            albedo: Color::hex('#000000'),
-            roughness: 1.0,
-            emission: Color::hex('#E8D8C0'),
-        ));
+        // Sky is rendered via a procedural cubemap skybox driven by DayNightSystem
+        // (SetSkybox command). No overlay hemispheres, no sky_* materials needed.
 
         // ======================
         //  SAND — multiple shades per zone for grain texture
@@ -911,16 +834,12 @@ class PlaygroundScene extends Scene
             roughness: 0.85,
         ));
 
-        // Sun — very bright emissive
+        // Sun — single bright emissive sphere. DayNightSystem animates the
+        // emission color/intensity based on time-of-day.
         MaterialRegistry::register('sun_disc', new Material(
-            albedo: Color::hex('#FFFFFF'),
+            albedo: Color::hex('#000000'),
             roughness: 1.0,
-            emission: Color::hex('#FFFF99'),
-        ));
-        MaterialRegistry::register('sun_glow', new Material(
-            albedo: Color::hex('#FFFDE0'),
-            roughness: 1.0,
-            emission: Color::hex('#DDBB44'),
+            emission: Color::hex('#FFF2B0'),
         ));
 
         // ==============================
