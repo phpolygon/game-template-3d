@@ -4,15 +4,15 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e479e3e4abd8c64254083aba7fb2e838",
+    "content-hash": "77caed25f1c2ac87e719d88cc777cc36",
     "packages": [
         {
             "name": "phpolygon/phpolygon",
-            "version": "v0.12.2",
+            "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "D:/PhpstormProjects/phpolygon/phpolygon",
-                "reference": "a30e0ee86d1640b3d6c01c1dfd81d2b876aa99c8"
+                "url": "../phpolygon",
+                "reference": "cdb96105c3b6dec1ebab851979cdeb592309f531"
             },
             "require": {
                 "ext-vio": "*",
@@ -50,7 +50,7 @@
             "description": "PHP-native game engine with AI-first authoring",
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         }
     ],

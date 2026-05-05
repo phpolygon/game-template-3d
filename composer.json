@@ -21,7 +21,7 @@
         }
     },
     "repositories": [
-        { "type": "path", "url": "D:/PhpstormProjects/phpolygon/phpolygon", "options": { "symlink": true } }
+        { "type": "path", "url": "../phpolygon", "options": { "symlink": true } }
     ],
     "minimum-stability": "dev",
     "prefer-stable": true

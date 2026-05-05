@@ -45,8 +45,9 @@ class Game
             targetTickRate: 60.0,
             assetsPath: __DIR__ . '/../assets',
             is3D: true,
-            renderBackend3D: 'auto',
-            vioBackend: 'd3d11',
+            renderBackend3D: 'metal',
+            vioBackend: 'auto',
+            useNative3D: true,
         ));
 
         $engine->onInit(function (Engine $engine) {
